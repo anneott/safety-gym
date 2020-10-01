@@ -8,6 +8,8 @@ from copy import deepcopy
 from collections import OrderedDict
 import mujoco_py
 from mujoco_py import MjViewer, MujocoException, const, MjRenderContextOffscreen
+#from envs.world import Roads
+from envs.traffic_world import Visualize, RandomRoads
 
 from safety_gym.envs.world import World, Robot
 
@@ -48,6 +50,15 @@ ORIGIN_COORDINATES = np.zeros(3)
 # Constant defaults for rendering frames for humans (not used for vision)
 DEFAULT_WIDTH = 256
 DEFAULT_HEIGHT = 256
+
+# Placement limits (min X, min Y, max X, max Y)
+grid_size_max = 10
+placement_xmin = 0
+placement_ymin = 0
+placement_xmax = grid_size_max
+placement_ymax = grid_size_max
+
+nr_of_roads = 5
 
 class ResamplingError(AssertionError):
     ''' Raised when we fail to sample a valid distribution of objects or goals '''
@@ -93,17 +104,30 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
     '''
 
+    # create given number of random roads
+    rr = RandomRoads(grid_size=grid_size_max)
+    roads = rr.create_road_start_and_ends(nr_of_roads)
+
+    # calculate coordinates for visualization
+    if roads:
+        vis = Visualize(roads, grid_size=grid_size_max)
+        road_locations = vis.calculate_road_locations()
+        hazard_locations = vis.calculate_hazards_locations()
+        print('Succeeded creating hazard_locations', hazard_locations)
+    else:
+        print('Failed creating hazard locations')
+
     # Default configuration (this should not be nested since it gets copied)
     DEFAULT = {
         'num_steps': 1000,  # Maximum number of environment steps in an episode
 
         'action_noise': 0.0,  # Magnitude of independent per-component gaussian action noise
 
-        'placements_extents': [-2, -2, 2, 2],  # Placement limits (min X, min Y, max X, max Y)
+        'placements_extents': [placement_xmin,placement_ymin,placement_xmax,placement_ymax],  # Placement limits (min X, min Y, max X, max Y)
         'placements_margin': 0.0,  # Additional margin added to keepout when placing objects
 
         # Floor
-        'floor_display_mode': False,  # In display mode, the visible part of the floor is cropped
+        'floor_display_mode': True,  # In display mode, the visible part of the floor is cropped
 
         # Robot
         'robot_placements': None,  # Robot placements list (defaults to full extents)
@@ -237,12 +261,22 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'constrain_gremlins': False,  # Moving objects that must be avoided
         'constrain_indicator': True,  # If true, all costs are either 1 or 0 for a given step.
 
+        # Areas where car should NOT enter
         # Hazardous areas
-        'hazards_num': 0,  # Number of hazards in an environment
-        'hazards_placements': None,  # Placements list for hazards (defaults to full extents)
-        'hazards_locations': [],  # Fixed locations to override placements
-        'hazards_keepout': 0.4,  # Radius of hazard keepout for placement
-        'hazards_size': 0.3,  # Radius of hazards
+        # initial
+        #'hazards_num': 0,  # Number of hazards in an environment
+        #'hazards_placements': None, # Placements list for hazards (defaults to full extents)
+        #'hazards_locations': [],  # Fixed locations to override placements
+        #'hazards_keepout': 0.4,  # Radius of hazard keepout for placement
+        #'hazards_size': 0.3,  # Radius of hazards
+        #'hazards_cost': 1.0,  # Cost (per step) for violating the constraint
+
+        # new
+        'hazards_num': len(hazard_locations),  # Number of hazards in an environment
+        'hazards_placements': None, #[(0,5,10,20) ],  # Placements list for hazards (defaults to full extents)
+        'hazards_locations': hazard_locations,  # Fixed locations to override placements
+        'hazards_keepout': 0.1, #0.3  # Radius of hazard keepout for placement
+        'hazards_size': 10000, #5000,  # Radius of hazards
         'hazards_cost': 1.0,  # Cost (per step) for violating the constraint
 
         # Vases (objects we should not touch)
@@ -708,14 +742,17 @@ class Engine(gym.Env, gym.utils.EzPickle):
                     'group': GROUP_GOAL,
                     'rgba': COLOR_GOAL * [1, 1, 1, 0.25]}  # transparent
             world_config['geoms']['goal'] = geom
+        # new: types can probably be [plane, hfield, sphere, capsule, ellipsoid, cylinder, box, mesh], "sphere"
         if self.hazards_num:
             for i in range(self.hazards_num):
                 name = f'hazard{i}'
                 geom = {'name': name,
-                        'size': [self.hazards_size, 1e-2],#self.hazards_size / 2],
-                        'pos': np.r_[self.layout[name], 2e-2],#self.hazards_size / 2 + 1e-2],
-                        'rot': self.random_rot(),
-                        'type': 'cylinder',
+                        #'size': [self.hazards_size, 1e-2],#self.hazards_size / 2],
+                        #'pos': np.r_[self.layout[name], 2e-2],#self.hazards_size / 2 + 1e-2],
+                        'size': np.ones(3) * self.hazards_size,
+                        'pos': np.r_[self.layout[name], self.hazards_size / 2 + 1e-2],
+                        'rot': 0, #self.random_rot(),
+                        'type': 'box',#'cylinder',
                         'contype': 0,
                         'conaffinity': 0,
                         'group': GROUP_HAZARD,
@@ -1255,7 +1292,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 self.set_mocaps()
                 self.sim.step()  # Physics simulation step
             except MujocoException as me:
-                print('MujocoException', me)
                 exception = True
                 break
         if exception:
