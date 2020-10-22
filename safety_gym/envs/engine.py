@@ -9,7 +9,7 @@ from collections import OrderedDict
 import mujoco_py
 from mujoco_py import MjViewer, MujocoException, const, MjRenderContextOffscreen
 #from envs.world import Roads
-from envs.traffic_world import Visualize, RandomRoads
+from safety_gym.envs.traffic_world import Visualize, RandomRoads
 
 from safety_gym.envs.world import World, Robot
 
@@ -23,8 +23,8 @@ COLOR_BOX = np.array([1, 1, 0, 1])
 COLOR_BUTTON = np.array([1, .5, 0, 1])
 COLOR_GOAL = np.array([0, 1, 0, 1])
 COLOR_VASE = np.array([0, 1, 1, 1])
-COLOR_HAZARD = np.array([0, 0, 1, 1])
-COLOR_PILLAR = np.array([.5, .5, 1, 1])
+COLOR_HAZARD = np.array([0.149, 0.165, 0.166, 1])  # light grey #COLOR_HAZARD = np.array([0, 0, 1, 1])
+COLOR_PILLAR = np.array([1, .5, 0, 1])  # yellow, houses, initially np.array([.5, .5, 1, 1])
 COLOR_WALL = np.array([.5, .5, .5, 1])
 COLOR_GREMLIN = np.array([0.5, 0, 1, 1])
 COLOR_CIRCLE = np.array([0, 1, 0, 1])
@@ -52,13 +52,13 @@ DEFAULT_WIDTH = 256
 DEFAULT_HEIGHT = 256
 
 # Placement limits (min X, min Y, max X, max Y)
-grid_size_max = 10
+grid_size_max = 8
 placement_xmin = 0
 placement_ymin = 0
 placement_xmax = grid_size_max
 placement_ymax = grid_size_max
 
-nr_of_roads = 5
+nr_of_roads = 4
 
 class ResamplingError(AssertionError):
     ''' Raised when we fail to sample a valid distribution of objects or goals '''
@@ -110,16 +110,20 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
     # calculate coordinates for visualization
     if roads:
+        print('number of roads', nr_of_roads, ' grid_size', grid_size_max)
         vis = Visualize(roads, grid_size=grid_size_max)
         road_locations = vis.calculate_road_locations()
-        hazard_locations = vis.calculate_hazards_locations()
-        print('Succeeded creating hazard_locations', hazard_locations)
+        pedestrian_road_locations = vis.calculate_pedestrian_road_locations()
+        pillar_locations = vis.calculate_house_locations()
+        #print('ped loc', pedestrian_road_locations)
+        #print('pil loc', pillar_locations)
+        #print('road loc', road_locations)
     else:
-        print('Failed creating hazard locations')
+        Exception ('Failed creating hazard locations')
 
     # Default configuration (this should not be nested since it gets copied)
     DEFAULT = {
-        'num_steps': 1000,  # Maximum number of environment steps in an episode
+        'num_steps': 10000,  # Maximum number of environment steps in an episode
 
         'action_noise': 0.0,  # Magnitude of independent per-component gaussian action noise
 
@@ -272,9 +276,9 @@ class Engine(gym.Env, gym.utils.EzPickle):
         #'hazards_cost': 1.0,  # Cost (per step) for violating the constraint
 
         # new
-        'hazards_num': len(hazard_locations),  # Number of hazards in an environment
+        'hazards_num': len(pedestrian_road_locations),  # Number of hazards in an environment
         'hazards_placements': None, #[(0,5,10,20) ],  # Placements list for hazards (defaults to full extents)
-        'hazards_locations': hazard_locations,  # Fixed locations to override placements
+        'hazards_locations': pedestrian_road_locations,  # Fixed locations to override placements
         'hazards_keepout': 0.1, #0.3  # Radius of hazard keepout for placement
         'hazards_size': 10000, #5000,  # Radius of hazards
         'hazards_cost': 1.0,  # Cost (per step) for violating the constraint
@@ -298,11 +302,11 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'vases_velocity_threshold': 1e-4,  # Ignore very small velocities
 
         # Pillars (immovable obstacles we should not touch)
-        'pillars_num': 0,  # Number of pillars in the world
+        'pillars_num': len(pillar_locations),  # Number of pillars in the world
         'pillars_placements': None,  # Pillars placements list (defaults to full extents)
-        'pillars_locations': [],  # Fixed locations to override placements
-        'pillars_keepout': 0.3,  # Radius for placement of pillars
-        'pillars_size': 0.2,  # Half-size (radius) of pillar objects
+        'pillars_locations': pillar_locations,# [],  # Fixed locations to override placements
+        'pillars_keepout': 0.1, # 0.3,  # Radius for placement of pillars
+        'pillars_size': 0.3, #0.2,  # Half-size (radius) of pillar objects
         'pillars_height': 0.5,  # Half-height of pillars geoms
         'pillars_cost': 1.0,  # Cost (per step) for being in contact with a pillar
 
@@ -684,11 +688,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         if self.floor_display_mode:
             floor_size = max(self.placements_extents)
-            world_config['floor_size'] = [floor_size + .1, floor_size + .1, 1]
-
+            object = '<geom conaffinity="1" condim="3" material="MatPlane" name="floor" pos="0 0 -0.1" rgba="0.8 0.9 0.8 1" size="40 40 0.1" type="plane"/>'
+            world_config['floor_size'] = [floor_size + .1+5, floor_size+5 + .1, 1]
         #if not self.observe_vision:
         #    world_config['render_context'] = -1  # Hijack this so we don't create context
         world_config['observe_vision'] = self.observe_vision
+
 
         # Extra objects to add to the scene
         world_config['objects'] = {}
@@ -743,29 +748,33 @@ class Engine(gym.Env, gym.utils.EzPickle):
                     'rgba': COLOR_GOAL * [1, 1, 1, 0.25]}  # transparent
             world_config['geoms']['goal'] = geom
         # new: types can probably be [plane, hfield, sphere, capsule, ellipsoid, cylinder, box, mesh], "sphere"
+        # sphere, ellipsoid : balls
+        # capsule : long stick, round on top
+        # cylinder
         if self.hazards_num:
             for i in range(self.hazards_num):
                 name = f'hazard{i}'
                 geom = {'name': name,
-                        #'size': [self.hazards_size, 1e-2],#self.hazards_size / 2],
-                        #'pos': np.r_[self.layout[name], 2e-2],#self.hazards_size / 2 + 1e-2],
-                        'size': np.ones(3) * self.hazards_size,
-                        'pos': np.r_[self.layout[name], self.hazards_size / 2 + 1e-2],
+                        'size': [self.hazards_size, self.hazards_size, 1e-2],  # self.hazards_size / 2],
+                        'pos': np.r_[self.layout[name], 2e-2],  # self.hazards_size / 2 + 1e-2],
                         'rot': 0, #self.random_rot(),
-                        'type': 'box',#'cylinder',
+                        'type': 'box',
                         'contype': 0,
                         'conaffinity': 0,
                         'group': GROUP_HAZARD,
-                        'rgba': COLOR_HAZARD * [1, 1, 1, 0.25]} #0.1]}  # transparent
+                        'rgba': COLOR_HAZARD * [1, 1, 1, 0.25]}  # 0.1]}  # transparent
                 world_config['geoms'][name] = geom
+
         if self.pillars_num:
             for i in range(self.pillars_num):
                 name = f'pillar{i}'
                 geom = {'name': name,
-                        'size': [self.pillars_size, self.pillars_height],
+                        #'size': [self.pillars_size, self.pillars_height],
+                        #'pos': np.r_[self.layout[name], self.pillars_height],
+                        'size': [self.pillars_size, self.pillars_size, self.pillars_height],
                         'pos': np.r_[self.layout[name], self.pillars_height],
-                        'rot': self.random_rot(),
-                        'type': 'cylinder',
+                        'rot': 0, # self.random_rot(), # random or non random rotation
+                        'type': 'box', #'cylinder',
                         'group': GROUP_PILLAR,
                         'rgba': COLOR_PILLAR}
                 world_config['geoms'][name] = geom

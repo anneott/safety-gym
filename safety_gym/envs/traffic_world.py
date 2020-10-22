@@ -230,6 +230,7 @@ class Visualize:
     def __init__(self, roads, grid_size):
         self.roads = roads
         self.road_loc = []
+        self.ped_road_loc = []
         self.grid_size = grid_size
 
     def calc_coordinates_between_two_points(self, start, end):
@@ -250,7 +251,7 @@ class Visualize:
         aD = np.abs(D)  # the absolute value of the maximum value
         # get's the slope in a way and floor divided it to get the change then add it to the first observation to get the path
         return (ends[0] + (np.outer(np.arange(aD + 1), d) + (
-                    aD >> 1)) // aD) / 2  # to have it with the 0.5 increment just multibly the cordinates by 2 and devide the result by 0.5 I guess is will work
+                aD >> 1)) // aD) / 2  # to have it with the 0.5 increment just multibly the cordinates by 2 and devide the result by 0.5 I guess is will work
 
     def calculate_road_locations(self):
         '''
@@ -265,27 +266,95 @@ class Visualize:
         self.road_loc = set()  # only want unique coordinates
 
         for road in self.roads:
-            print('is road vertical?', road.is_vertical)
             road_path = self.calc_coordinates_between_two_points(road.pt1, road.pt2)
 
             # change the road path from list to tuple ([1,2] -> (1,2))
             for x, y in road_path:
                 self.road_loc.add((x, y))
-                # add one more road to the right
+                # for vertical roads -> add one more road to the right
                 if road.is_vertical:
                     self.road_loc.add((x + 0.5, y))
-                # add one more road above
+                # for horizontal roads -> add one more road above
                 else:
                     self.road_loc.add((x, y + 0.5))
 
+        # the upper corner road is always not added during previous process, add it now
+        self.road_loc.add((self.grid_size - 0.5, self.grid_size - 0.5))
         return list(self.road_loc)
 
-    def calculate_hazards_locations(self):
+    def calculate_pedestrian_road_locations(self):
+        '''
+        Calculate locations where to place the pedestrian roads based on road start and end points.
+        Take into account, that roads are made 0.5 thicker than described in start and end points.
+
+        Returns
+            list containing tuples (e.g. [(1,2),(1,3),...])
+        '''
+        self.ped_road_loc = set()  # only want unique coordinates
+
+        # for every road point, surround it with pedestrian roads, overlapping is dealt with later
+        for x, y in self.road_loc:
+            self.ped_road_loc.add((x, y + 0.5))
+            self.ped_road_loc.add((x, y - 0.5))
+            self.ped_road_loc.add((x + 0.5, y))
+            self.ped_road_loc.add((x - 0.5, y))
+
+        # all the corners are missing pedestrian roads, add them now
+        self.ped_road_loc.add((self.grid_size, self.grid_size))
+        self.ped_road_loc.add((-0.5, -0.5))
+        self.ped_road_loc.add((-0.5, self.grid_size))
+        self.ped_road_loc.add((self.grid_size, -0.5))
+
+        # make sure that the pedestrian roads do not overlap with normal roads
+        self.ped_road_loc = set(self.ped_road_loc) - set(
+            self.road_loc)  # [ped_loc for ped_loc in list(self.ped_road_loc) if ped_loc not in list(self.road_loc)]
+
+        return list(self.ped_road_loc)
+
+    def calculate_pedestrian_road_locations_old(self):
+        '''
+        Calculate locations where to place the pedestrian roads based on road start and end points.
+        Take into account, that roads are made 0.5 thicker than described in start and end points.
+
+        Returns
+            list containing tuples (e.g. [(1,2),(1,3),...])
+        '''
+        self.ped_road_loc = set()  # only want unique coordinates
+
+        for road in self.road_loc:
+            road_path = self.calc_coordinates_between_two_points(road.pt1, road.pt2)
+
+            # change the road path from list to tuple ([1,2] -> (1,2))
+            for x, y in road_path:
+                self.ped_road_loc.add((x, y))
+                # add pedestrian roads to left and right
+                if road.is_vertical:
+                    self.ped_road_loc.add((x + 1, y))
+                    self.ped_road_loc.add((x - 0.5, y))
+                # add pedestrian roads below and above
+                else:
+                    self.ped_road_loc.add((x, y + 1))
+                    self.ped_road_loc.add((x, y - 0.5))
+        # all the corners are missing pedestrian roads, add it now
+        # upper right
+        self.ped_road_loc.add((self.grid_size, self.grid_size))
+        self.ped_road_loc.add((self.grid_size - 0.5, self.grid_size))
+        self.ped_road_loc.add((self.grid_size, self.grid_size - 0.5))
+
+        # make sure that the pedestrian roads do not overlap with normal roads
+        self.ped_road_loc = set(self.ped_road_loc) - set(
+            self.road_loc)  # [ped_loc for ped_loc in list(self.ped_road_loc) if ped_loc not in list(self.road_loc)]
+
+        return list(self.ped_road_loc)
+
+    def calculate_house_locations(self):
         '''
         Everything that is NOT road will be covered with hazards.
         '''
         # calculate all the possible coordinates in the grid
-        all_points_inside_grid = [(i, j) for j in np.arange(0.0, self.grid_size, 0.5) for i in np.arange(0.0, self.grid_size, 0.5)]
+        all_points_inside_grid = [(i, j) for j in np.arange(0.0, self.grid_size, 0.5) for i in
+                                  np.arange(0.0, self.grid_size, 0.5)]
         print('nr of all points in grid ', len(all_points_inside_grid))
         # subtract the road coordinates
-        return list(set(all_points_inside_grid) - set(self.road_loc))
+        return list(set(all_points_inside_grid) - set(self.road_loc) - set(self.ped_road_loc))
+

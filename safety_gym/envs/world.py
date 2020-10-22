@@ -99,6 +99,7 @@ class World:
         dim = self.model.sensor_dim[id]
         return self.data.sensordata[adr:adr + dim].copy()
 
+    # TODO: here already have the floor
     def build(self):
         ''' Build a world, including generating XML and moving objects '''
         # Read in the base XML (contains robot, camera, floor, etc)
@@ -160,14 +161,16 @@ class World:
         # Add floor to the XML dictionary if missing
         if not any(g.get('@name') == 'floor' for g in worldbody['geom']):
             floor = xmltodict.parse('''
-                <geom name="floor" type="plane" condim="6"/>
+                <geom name="floor" type="plane" condim="6" rgba="1, 0, 0, 1"/>
                 ''')
             worldbody['geom'].append(floor['geom'])
 
         # Make sure floor renders the same for every world
+        # FLOOR PARAMETERS CAN BE CHANGED HERE
         for g in worldbody['geom']:
             if g['@name'] == 'floor':
-                g.update({'@size': convert(self.floor_size), '@rgba': '1 1 1 1', '@material': 'MatPlane'})
+                # g.update({'@size': convert(self.floor_size), '@rgba': '108 122 137 1', '@material': 'MatPlane'})
+                g.update({'@size': convert(self.floor_size), '@rgba': '0.38 0.38 0.38 1'})
 
         # Add cameras to the XML dictionary
         cameras = xmltodict.parse('''<b>
@@ -414,3 +417,175 @@ class Robot:
                     # (That we are invariant to relative whole-world transforms)
                     # If slide joints are added we sould ensure this stays true!
                     raise ValueError('Slide joints in robots not currently supported')
+
+# TODO UNUSED
+class Roads:
+    """
+    Roads are surrounded by hazards (getting negative reward for stepping on them).
+
+    Algorithm 1:
+    1. Specify the coordinates of the road intersections. The intersections should be on the same parallel or horizontal
+    lines in order for the map to look more organized.
+    2. Connect all the intersections with k closest intersections.
+        - If k = 1, then it is a dead end.
+        - If k = 2, then it is a road. Check the angle between the two closest points and our intersection.
+        - If k = 3, then it is an intersection. Check the angle between the closest points.
+    3. Fill the boarders of the roads with hazards (dangerous areas to avoid = pedestrian lanes).
+    4. Fill the rest of the spaces with pillars (immobile obstacles = houses).
+
+    Algorithm 2:
+    If you have n different lines then those lines intersect in (n**2 - n)/2 different points ALMOST surely. Those are
+    full intersections.
+    ## In order to get other type of intersections, random points can be added and connected to our full intersections.
+
+    1. Define two lines a1*x + b1*y + c1 = 0 and a2*x+ b2*y + c2 = 0 that intersect in our given world.
+    2. Calculate the intersection of those lines
+                    x0 = (b1*c2 - b2*c1)/(a1*b2 - a2*b1)
+                    y0 = (a2*c1 - a1*c2)/(a1*b2 - a2*b1)
+       and check that the intersection is inside of our defined world.
+    3. Calculate the angle theta between those lines
+                    tan(theta) = (a2-a1)/(1-a1*a2)
+       and check that the angle is greater than some threshold (otherwise the curve is too sharp).
+    4. Choose one of the lines defined in 1. and add a new random (and perpendicular for a more symmetric world)
+      line a3*x + b3*y + c3 = 0 that intersect with the chosen line.
+      Make sure that the constraints 2. and 3. are fulfilled.
+    5. Repeat 4. until desired number certain intersections is reached in our world.
+
+    Calculate all the intersections between all the lines an keep only those intersections (and lines) that are inside
+    our defined world.
+    """
+
+    def __init__(self, start, end):
+        self.start = start #[1, -3]
+        self.end = end #[2, -1]
+
+    def connect_two_points(self, start, end):
+        """
+        Takes two points as numpy 2D array and returns coordinates that connect those two points.
+
+        Parameters:
+        ends (numpy array): cooridnates of two points (e.g. start = [-1, 0], end = [2, 0]))
+
+        Returns:
+        numpy array: coordinates that connect those two points  (e.g. [[-1  0] [ 0  0] [ 1  0] [ 2  0]])
+        """
+        ends = np.array([start, end])
+        d = np.diff(ends, axis=0)[0]  # gives the difference btw both arrays on an a vertical axis
+        j = np.argmax(np.abs(d))  # returns the index of the max value in the previous vector (note we take abs)
+        D = d[j]  # we get the value from the vector
+        aD = np.abs(D)  # the absolute value of the maximum value
+        # get's the slope in a way and floor divided it to get the change then add it to the first observation to get the path
+        return ends[0] + (np.outer(np.arange(aD + 1), d) + (aD >> 1)) // aD
+
+    def calculate_hazard_locations(self):
+        path = self.connect_two_points(self.start, self.end)
+        # requires a list of tuples
+        hazard_loc = [(x, y) for x, y in path]
+        return hazard_loc
+
+
+
+class Graph(object):
+
+    def __init__(self, graph_dict=None):
+        """ initializes a graph object
+            If no dictionary or None is given,
+            an empty dictionary will be used
+        """
+        if graph_dict == None:
+            graph_dict = {}
+        self.__graph_dict = graph_dict
+
+    def vertices(self):
+        """ returns the vertices of a graph """
+        return list(self.__graph_dict.keys())
+
+    def edges(self):
+        """ returns the edges of a graph """
+        return self.__generate_edges()
+
+    def add_vertex(self, vertex):
+        """ If the vertex "vertex" is not in
+            self.__graph_dict, a key "vertex" with an empty
+            list as a value is added to the dictionary.
+            Otherwise nothing has to be done.
+        """
+        if vertex not in self.__graph_dict:
+            self.__graph_dict[vertex] = []
+
+    def add_edge(self, edge):
+        """ assumes that edge is of type set, tuple or list;
+            between two vertices can be multiple edges!
+        """
+        edge = set(edge)
+        (vertex1, vertex2) = tuple(edge)
+        if vertex1 in self.__graph_dict:
+            self.__graph_dict[vertex1].append(vertex2)
+        else:
+            self.__graph_dict[vertex1] = [vertex2]
+
+    def __generate_edges(self):
+        """ A static method generating the edges of the
+            graph "graph". Edges are represented as sets
+            with one (a loop back to the vertex) or two
+            vertices
+        """
+        edges = []
+        for vertex in self.__graph_dict:
+            for neighbour in self.__graph_dict[vertex]:
+                if {neighbour, vertex} not in edges:
+                    edges.append({vertex, neighbour})
+        return edges
+
+    def __str__(self):
+        res = "vertices: "
+        for k in self.__graph_dict:
+            res += str(k) + " "
+        res += "\nedges: "
+        for edge in self.__generate_edges():
+            res += str(edge) + " "
+        return
+
+#
+# if __name__ == "__main__":
+#     g = {"a": ["d"],
+#          "b": ["c"],
+#          "c": ["b", "c", "d", "e"],
+#          "d": ["a", "c"],
+#          "e": ["c"],
+#          "f": []
+#          }
+#
+#     graph = Graph(g)
+#
+#     print("Vertices of graph:")
+#     print(graph.vertices())
+#
+#     print("Edges of graph:")
+#     print(graph.edges())
+#
+#     print("Add vertex:")
+#     graph.add_vertex("z")
+#
+#     print("Vertices of graph:")
+#     print(graph.vertices())
+#
+#     print("Add an edge:")
+#     graph.add_edge({"a", "z"})
+#
+#     print("Vertices of graph:")
+#     print(graph.vertices())
+#
+#     print("Edges of graph:")
+#     print(graph.edges())
+#
+#     print('Adding an edge {"x","y"} with new vertices:')
+#     graph.add_edge({"x", "y"})
+#     print("Vertices of graph:")
+#     print(graph.vertices())
+#     print("Edges of graph:")
+#     print(graph.edges())
+
+
+
+

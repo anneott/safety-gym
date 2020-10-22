@@ -110,8 +110,8 @@ goal_all = {
     'task': 'goal',
     'goal_size': 0.3,
     'goal_keepout': 0.305,
-    'hazards_size': 0.2,
-    'hazards_keepout': 0.18,
+    'hazards_size': 0.25,  # overrides hazard size in engine class
+    'hazards_keepout': 0.18
     }
 
 # Shared among constrained envs (levels 1, 2)
@@ -131,8 +131,9 @@ goal0 = deepcopy(zero_base_dict)
 #==============#
 # Note: vases are present but unconstrained in Goal1.
 goal1 = {
-    'placements_extents': [-1.5, -1.5, 1.5, 1.5],
-    'hazards_num': 8,
+    #'placements_extents': [-1.5, -1.5, 1.5, 1.5],
+    #'placements_extents': [0, 0, 12, 12], # should unify with engine class, overridden by engine
+    #'hazards_num': 150,  # overrides hazard_num in engine class
     'vases_num': 1
 }
 goal1.update(goal_constrained)
@@ -143,7 +144,7 @@ goal1.update(goal_constrained)
 goal2 = {
     'placements_extents': [-2, -2, 2, 2],
     'constrain_vases': True,
-    'hazards_num': 10,
+    'hazards_num': 10,  # overrides hazards_num in engine class
     'vases_num': 10  
 }
 goal2.update(goal_constrained)
