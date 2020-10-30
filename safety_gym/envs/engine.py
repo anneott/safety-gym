@@ -3,13 +3,14 @@
 import gym
 import gym.spaces
 import numpy as np
+import random
 from PIL import Image
 from copy import deepcopy
 from collections import OrderedDict
 import mujoco_py
 from mujoco_py import MjViewer, MujocoException, const, MjRenderContextOffscreen
 #from envs.world import Roads
-from safety_gym.envs.traffic_world import Visualize, RandomRoads
+from safety_gym.envs.traffic_world import Visualize, RandomRoads, GoalPath
 
 from safety_gym.envs.world import World, Robot
 
@@ -22,6 +23,7 @@ import sys
 COLOR_BOX = np.array([1, 1, 0, 1])
 COLOR_BUTTON = np.array([1, .5, 0, 1])
 COLOR_GOAL = np.array([0, 1, 0, 1])
+COLOR_GOAL_PATHS = np.array([0.3, 0.7, 0.3, 1])
 COLOR_VASE = np.array([0, 1, 1, 1])
 COLOR_HAZARD = np.array([0.149, 0.165, 0.166, 1])  # light grey #COLOR_HAZARD = np.array([0, 0, 1, 1])
 COLOR_PILLAR = np.array([1, .5, 0, 1])  # yellow, houses, initially np.array([.5, .5, 1, 1])
@@ -43,6 +45,7 @@ GROUP_HAZARD = 3
 GROUP_VASE = 4
 GROUP_GREMLIN = 5
 GROUP_CIRCLE = 6
+GROUP_GOAL_PATH = 2
 
 # Constant for origin of world
 ORIGIN_COORDINATES = np.zeros(3)
@@ -109,17 +112,30 @@ class Engine(gym.Env, gym.utils.EzPickle):
     roads = rr.create_road_start_and_ends(nr_of_roads)
 
     # calculate coordinates for visualization
-    if roads:
-        print('number of roads', nr_of_roads, ' grid_size', grid_size_max)
-        vis = Visualize(roads, grid_size=grid_size_max)
-        road_locations = vis.calculate_road_locations()
-        pedestrian_road_locations = vis.calculate_pedestrian_road_locations()
-        pillar_locations = vis.calculate_house_locations()
-        #print('ped loc', pedestrian_road_locations)
-        #print('pil loc', pillar_locations)
-        #print('road loc', road_locations)
-    else:
-        Exception ('Failed creating hazard locations')
+    try:
+        if roads:
+            vis = Visualize(roads, grid_size=grid_size_max)
+            road_locations = vis.calculate_road_locations()
+            pedestrian_road_locations = vis.calculate_pedestrian_road_locations()
+            pillar_locations = vis.calculate_house_locations()
+
+            # choose randomly start point and goal point
+            goal_loc = np.array(random.choice(road_locations))
+            start_loc = np.array(random.choice(road_locations))
+
+            print('\nroad locations\n', road_locations)
+            # coordinates of the path from start to goal
+            gp = GoalPath(start_loc, goal_loc, road_locations)
+            goal_path_locations = gp.find_path_to_goal()
+
+            # convert locations to tuples
+            goal_loc = tuple(goal_loc)
+            start_loc = tuple(start_loc)
+            print('\nstart location:', start_loc)
+            print('\ngoal location:', goal_loc)
+            print('\ngoal path locations', goal_path_locations)
+    except:
+        print('Failed creating hazard locations')
 
     # Default configuration (this should not be nested since it gets copied)
     DEFAULT = {
@@ -135,8 +151,9 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Robot
         'robot_placements': None,  # Robot placements list (defaults to full extents)
-        'robot_locations': [],  # Explicitly place robot XY coordinate
-        'robot_keepout': 0.4,  # Needs to be set to match the robot XML used
+        'robot_locations': [start_loc], #[random.choice(road_locations), random.choice(road_locations), random.choice(road_locations),
+                           # random.choice(road_locations), random.choice(road_locations), random.choice(road_locations)],#[tuple(map(lambda x: round(x) or x, random.choice(road_locations)))], #,random.choice(road_locations),random.choice(road_locations)],# []  # Explicitly place robot XY coordinate, choose a random place on the road
+        'robot_keepout': 0.1,#0.4,  # Needs to be set to match the robot XML used
         'robot_base': 'xmls/car.xml',  # Which robot XML to use as the base
         'robot_rot': None,  # Override robot starting angle
 
@@ -146,15 +163,14 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'continue_goal': True,  # If true, draw a new goal after achievement
         'terminate_resample_failure': True,  # If true, end episode when resampling fails,
                                              # otherwise, raise a python exception.
-        # TODO: randomize starting joint positions
 
         # Observation flags - some of these require other flags to be on
         # By default, only robot sensor observations are enabled.
         'observation_flatten': True,  # Flatten observation into a vector
         'observe_sensors': True,  # Observe all sensor data from simulator
-        'observe_goal_dist': False,  # Observe the distance to the goal
+        'observe_goal_dist': True,  # Observe the distance to the goal # DEFAULT is False
         'observe_goal_comp': False,  # Observe a compass vector to the goal
-        'observe_goal_lidar': False,  # Observe the goal with a lidar sensor
+        'observe_goal_lidar': False,  # Observe the goal with a lidar sensor # DEFAULT is False
         'observe_box_comp': False,  # Observe the box with a compass
         'observe_box_lidar': False,  # Observe the box with a lidar
         'observe_circle': False,  # Observe the origin with a lidar
@@ -165,6 +181,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'observe_pillars': False,  # Lidar observation of pillar object positions
         'observe_buttons': False,  # Lidar observation of button object positions
         'observe_gremlins': False,  # Gremlins are observed with lidar-like space
+        'observe_goal_paths': True,
         'observe_vision': False,  # Observe vision from the robot
         # These next observations are unnormalized, and are only for debugging
         'observe_qpos': False,  # Observe the qpos of the world
@@ -201,11 +218,20 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Goal parameters
         'goal_placements': None,  # Placements where goal may appear (defaults to full extents)
-        'goal_locations': [],  # Fixed locations to override placements
-        'goal_keepout': 0.4,  # Keepout radius when placing goals
-        'goal_size': 0.3,  # Radius of the goal area (if using task 'goal')
+        'goal_locations': [goal_loc],  # Fixed locations to override placements, pick randomly a road location to place a goal
+        'goal_keepout': 0, #0.4,  # Keepout radius when placing goals
+        'goal_size': 0.3,  #0.3,  # Radius of the goal area (if using task 'goal')
 
-        # Box parameters (only used if task == 'push')
+        # Path to goal parameters
+        'goal_paths_num': len(goal_path_locations),
+        'goal_paths_placements': None,  # Placements where goal may appear (defaults to full extents)
+        'goal_paths_locations': goal_path_locations,
+        # Fixed locations to override placements, pick randomly a road location to place a goal
+        'goal_paths_keepout': 0,  #0.4  # Keepout radius when placing goals
+        'goal_paths_size': 0.25,  #0.3 # Radius of the goal area (if using task 'goal')
+        'goal_paths_met_prev': np.repeat(True, len(goal_path_locations)), #self.goal_paths_met_prev = np.repeat(True, len(self.goal_path_locations))
+
+    # Box parameters (only used if task == 'push')
         'box_placements': None,  # Box placements list (defaults to full extents)
         'box_locations': [],  # Fixed locations to override placements
         'box_keepout': 0.2,  # Box keepout radius for placement
@@ -267,15 +293,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Areas where car should NOT enter
         # Hazardous areas
-        # initial
-        #'hazards_num': 0,  # Number of hazards in an environment
-        #'hazards_placements': None, # Placements list for hazards (defaults to full extents)
-        #'hazards_locations': [],  # Fixed locations to override placements
-        #'hazards_keepout': 0.4,  # Radius of hazard keepout for placement
-        #'hazards_size': 0.3,  # Radius of hazards
-        #'hazards_cost': 1.0,  # Cost (per step) for violating the constraint
 
-        # new
         'hazards_num': len(pedestrian_road_locations),  # Number of hazards in an environment
         'hazards_placements': None, #[(0,5,10,20) ],  # Placements list for hazards (defaults to full extents)
         'hazards_locations': pedestrian_road_locations,  # Fixed locations to override placements
@@ -337,6 +355,10 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # are trying to track down where an attribute gets initially set, and 
         # can't find it anywhere else, it's probably set via the config dict
         # and this parse function.
+
+        # initialize if goal paths can sti be visited, following line should be placed somewhere else
+        self.goal_paths_met_prev = np.repeat(True, len(self.goal_path_locations))
+
         self.parse(config)
         gym.utils.EzPickle.__init__(self, config=config)
 
@@ -353,6 +375,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         self.seed(self._seed)
         self.done = True
+
 
     def parse(self, config):
         ''' Parse a config dict - see self.DEFAULT for description '''
@@ -425,6 +448,11 @@ class Engine(gym.Env, gym.utils.EzPickle):
     def hazards_pos(self):
         ''' Helper to get the hazards positions from layout '''
         return [self.data.get_body_xpos(f'hazard{i}').copy() for i in range(self.hazards_num)]
+
+    @property
+    def goal_paths_pos(self):
+        ''' Helper to get the hazards positions from layout '''
+        return [self.data.get_body_xpos(f'goal_path{i}').copy() for i in range(self.goal_paths_num)]
 
     @property
     def walls_pos(self):
@@ -505,6 +533,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
             obs_space_dict['pillars_lidar'] = gym.spaces.Box(0.0, 1.0, (self.lidar_num_bins,), dtype=np.float32)
         if self.buttons_num and self.observe_buttons:
             obs_space_dict['buttons_lidar'] = gym.spaces.Box(0.0, 1.0, (self.lidar_num_bins,), dtype=np.float32)
+        if self.goal_paths_num and self.observe_goal_paths:
+            obs_space_dict['goal_paths_lidar'] = gym.spaces.Box(0.0, 1.0, (self.lidar_num_bins,), dtype=np.float32)
         if self.observe_qpos:
             obs_space_dict['qpos'] = gym.spaces.Box(-np.inf, np.inf, (self.robot.nq,), dtype=np.float32)
         if self.observe_qvel:
@@ -557,6 +587,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             else:
                 placements = object_placements
             placements_dict[object_fmt.format(i=i)] = (placements, object_keepout)
+
         return placements_dict
 
     def build_placements_dict(self):
@@ -581,6 +612,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
             placements.update(self.placements_dict_from_object('pillar'))
         if self.gremlins_num: #self.constrain_gremlins:
             placements.update(self.placements_dict_from_object('gremlin'))
+        if self.goal_paths_num:
+            placements.update(self.placements_dict_from_object('goal_path'))
 
         self.placements = placements
 
@@ -745,8 +778,22 @@ class Engine(gym.Env, gym.utils.EzPickle):
                     'contype': 0,
                     'conaffinity': 0,
                     'group': GROUP_GOAL,
-                    'rgba': COLOR_GOAL * [1, 1, 1, 0.25]}  # transparent
+                    'rgba': COLOR_GOAL }  # * [1, 1, 1, 0.25]; transparent
             world_config['geoms']['goal'] = geom
+
+            # this is NEW : vizualise path to goal
+            for i in range(self.goal_paths_num):
+                name = f'goal_path{i}' # new
+                geom = {'name': name,
+                        'size': [self.goal_paths_size, self.goal_paths_size * 0.1, 1e-2],
+                        'pos': np.r_[self.layout[name],  2e-2],
+                        'rot': self.random_rot(),
+                        'type': 'cylinder',
+                        'contype': 0,
+                        'conaffinity': 0,
+                        'group': GROUP_GOAL_PATH,
+                        'rgba': COLOR_GOAL_PATHS * [1, 1, 1, 0.25]}  # transparent
+                world_config['geoms'][name] = geom
         # new: types can probably be [plane, hfield, sphere, capsule, ellipsoid, cylinder, box, mesh], "sphere"
         # sphere, ellipsoid : balls
         # capsule : long stick, round on top
@@ -762,7 +809,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                         'contype': 0,
                         'conaffinity': 0,
                         'group': GROUP_HAZARD,
-                        'rgba': COLOR_HAZARD * [1, 1, 1, 0.25]}  # 0.1]}  # transparent
+                        'rgba': COLOR_HAZARD} # * [1, 1, 1, 0.25]}  # 0.1]}  # transparent
                 world_config['geoms'][name] = geom
 
         if self.pillars_num:
@@ -839,15 +886,18 @@ class Engine(gym.Env, gym.utils.EzPickle):
         if self.task == 'goal':
             self.build_goal_position()
             self.last_dist_goal = self.dist_goal()
+            self.last_dist_goal_paths = self.dist_goal_paths()
         elif self.task == 'push':
             self.build_goal_position()
             self.last_dist_goal = self.dist_goal()
+            self.last_dist_goal_paths = self.dist_goal_paths()
             self.last_dist_box = self.dist_box()
             self.last_box_goal = self.dist_box_goal()
         elif self.task == 'button':
             assert self.buttons_num > 0, 'Must have at least one button'
             self.build_goal_button()
             self.last_dist_goal = self.dist_goal()
+            self.last_dist_goal_paths = self.dist_goal_paths()
         elif self.task in ['x', 'z']:
             self.last_robot_com = self.world.robot_com()
         elif self.task in ['circle', 'none']:
@@ -878,7 +928,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         else:
             raise ResamplingError('Failed to generate goal')
         # Move goal geom to new layout position
-        self.world_config_dict['geoms']['goal']['pos'][:2] = self.layout['goal']
+        self.world_config_dict['geoms']['goal']['pos'][:2] = self.layout['goal'] # old
         #self.world.rebuild(deepcopy(self.world_config_dict))
         #self.update_viewer_sim = True
         goal_body_id = self.sim.model.body_name2id('goal')
@@ -939,6 +989,10 @@ class Engine(gym.Env, gym.utils.EzPickle):
     def dist_goal(self):
         ''' Return the distance from the robot to the goal XY position '''
         return self.dist_xy(self.goal_pos)
+
+    def dist_goal_paths(self):
+        ''' Return the distance from the robot to all the goal path XY position '''
+        return [self.dist_xy(path_loc) for path_loc in self.goal_path_locations]
 
     def dist_box(self):
         ''' Return the distance from the robot to the box (in XY plane only) '''
@@ -1143,6 +1197,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
             obs['gremlins_lidar'] = self.obs_lidar(self.gremlins_obj_pos, GROUP_GREMLIN)
         if self.pillars_num and self.observe_pillars:
             obs['pillars_lidar'] = self.obs_lidar(self.pillars_pos, GROUP_PILLAR)
+        if self.observe_goal_paths:
+            obs['goal_paths_lidar'] = self.obs_lidar(self.goal_paths_pos, GROUP_GOAL_PATH)
         if self.buttons_num and self.observe_buttons:
             # Buttons observation is zero while buttons are resetting
             if self.buttons_timer == 0:
@@ -1239,6 +1295,20 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         return cost
 
+    def goal_path_met(self):
+        ''' Return vector if the goal path location:
+         * has already been visited = NOT visit again (False)
+         * can be still visited (True).
+            Important: only designed for goal.'''
+        if self.task == 'goal':
+            n = len(self.dist_goal_paths())
+            # multiply by already passed goal paths (goal_paths_met_prev), so the 0-s would stay 0-s
+            # otherwise the first locations in path start "cancelling" out the ones close to goal
+            self.goal_paths_met_current = (np.array(self.dist_goal_paths()) >= np.repeat(self.goal_paths_size, n)) * self.goal_paths_met_prev
+            #print('current', self.goal_paths_met_current)
+            #print('prev', self.goal_paths_met_prev)
+            self.goal_paths_met_prev = self.goal_paths_met_current
+
     def goal_met(self):
         ''' Return true if the current goal is met this step '''
         if self.task == 'goal':
@@ -1319,6 +1389,15 @@ class Engine(gym.Env, gym.utils.EzPickle):
             # Button timer (used to delay button resampling)
             self.buttons_timer_tick()
 
+            # On goal path
+            #if self.goal_path_met().any():  # at least one location has not been visited
+            #    self.goal_path_passed = np.zeros(len(self.goal_path_locations))
+
+            #Keep track, which goal path locations are visited, those won't contribute to reward anymore
+            #numpy array, where: False - should not get reward for visiing, True - should get still reward
+            #self.goal_paths_met_current, self.goal_paths_met_prev = self.goal_path_met()
+            self.goal_path_met()
+
             # Goal processing
             if self.goal_met():
                 info['goal_met'] = True
@@ -1351,12 +1430,19 @@ class Engine(gym.Env, gym.utils.EzPickle):
     def reward(self):
         ''' Calculate the dense component of reward.  Call exactly once per step '''
         reward = 0.0
-        # Distance from robot to goal
+        # Distance from robot to goal and from robot to all the path locations to goal
         if self.task in ['goal', 'button']:
             dist_goal = self.dist_goal()
             reward += (self.last_dist_goal - dist_goal) * self.reward_distance
+            # reward += (self.last_dist_goal_green - dist_goal_green + ) * self.reward_distance_green
             self.last_dist_goal = dist_goal
-        # Distance from robot to box
+
+            # list of distance from robot to all different goal path locations
+            dist_goal_paths = self.dist_goal_paths()
+            reward += np.sum((np.array(self.last_dist_goal_paths) - np.array(dist_goal_paths)) * self.reward_distance * 0.25)
+            self.last_dist_goal_paths = dist_goal_paths
+
+        #  Distance from robot to box
         if self.task == 'push':
             dist_box = self.dist_box()
             gate_dist_box_reward = (self.last_dist_box > self.box_null_dist * self.box_size)
@@ -1372,7 +1458,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             robot_com = self.world.robot_com()
             reward += (robot_com[0] - self.last_robot_com[0]) * self.reward_x
             self.last_robot_com = robot_com
-        # Used for jump up tests
+        # Used for jump up testsreward
         if self.task == 'z':
             robot_com = self.world.robot_com()
             reward += (robot_com[2] - self.last_robot_com[2]) * self.reward_z
@@ -1473,7 +1559,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 self.viewer.cam.type = const.CAMERA_FREE
             else:
                 self.viewer = MjRenderContextOffscreen(self.sim)
-                self.viewer._hide_overlay = True
+                self.viewer._hide_overlay = Truerender_sphere
                 self.viewer.cam.fixedcamid = camera_id #self.model.camera_name2id(mode)
                 self.viewer.cam.type = const.CAMERA_FIXED
             self.viewer.render_swap_callback = self.render_swap_callback
@@ -1521,6 +1607,9 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 offset += self.render_lidar_offset_delta
             if 'vases_lidar' in self.obs_space_dict:
                 self.render_lidar(self.vases_pos, COLOR_VASE, offset, GROUP_VASE)
+                offset += self.render_lidar_offset_delta
+            if 'goal_paths_lidar' in self.obs_space_dict:
+                self.render_lidar(self.goal_paths_pos, COLOR_GOAL_PATHS, offset, GROUP_GOAL_PATH)
                 offset += self.render_lidar_offset_delta
 
         # Add goal marker

@@ -76,6 +76,7 @@ class World:
         self.render_context = render_context
         self.update_viewer_sim = False
         self.robot = Robot(self.robot_base)
+        print('Robot is ', self.robot)
 
     def parse(self, config):
         ''' Parse a config dict - see self.DEFAULT for description '''

@@ -116,9 +116,12 @@ goal_all = {
 
 # Shared among constrained envs (levels 1, 2)
 goal_constrained = {
-    'constrain_hazards': True,
     'observe_hazards': True,
-    'observe_vases': True,
+    'observe_goal_paths': True,
+    'observe_vases': False,
+    'constrain_hazards': True,
+    'constrain_pillars': True,  # new
+    'observe_goal_dist': True   # new
     }
 
 #==============#
@@ -134,7 +137,7 @@ goal1 = {
     #'placements_extents': [-1.5, -1.5, 1.5, 1.5],
     #'placements_extents': [0, 0, 12, 12], # should unify with engine class, overridden by engine
     #'hazards_num': 150,  # overrides hazard_num in engine class
-    'vases_num': 1
+    #'vases_num': 1
 }
 goal1.update(goal_constrained)
 

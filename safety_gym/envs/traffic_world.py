@@ -1,4 +1,7 @@
 import numpy as np
+import heapq
+import random
+
 
 class RandomRoads:
 
@@ -358,3 +361,68 @@ class Visualize:
         # subtract the road coordinates
         return list(set(all_points_inside_grid) - set(self.road_loc) - set(self.ped_road_loc))
 
+
+class GoalPath:
+    '''
+    Find path (coordinates) that connect start and goal locations.
+    start and goal locations must be numpy arrays with shape (1,2) e.g.  np.array([3.5,1])
+    '''
+
+    def __init__(self, start_loc, goal_loc, road_locations):
+        self.start_loc = start_loc
+        self.goal_loc = goal_loc
+        self.road_locations = road_locations
+
+    def get_neighbours(self, l):
+        '''
+        l - locations e.g. np.array([3.5,1])
+        returns locations right, down, left, up
+        '''
+        x, y = l
+        return np.array([(x + 0.5, y), (x, y - 0.5), (x - 0.5, y), (x, y + 0.5)])
+
+    def closest_point_to_goal(self, neighbours):
+        '''
+        Returns the closest neighbour location to the goal.
+
+        1) Given four points, calculate which one is closest to the goal.
+        2) Checks that chosen point is actually on car road and not on pedestrian road
+        3) If true then return the location, else continue search
+        '''
+        goal_locs = np.repeat(np.array([self.goal_loc]), 4, axis=0)  # repeat goal location 4 times, for left right up and down
+        dists = self.eucledian_distance(neighbours, goal_locs)  # calculate the distance between each neighbour and end goal
+        dists = dists + np.random.uniform(0, 0.5, dists.shape)  # all distances need to be unique so add a little bit randomness to distances, this also helps for the algorithm to not get stuck between two states
+
+        # return the closest point to the goal that is on car road
+        for i in range(1, 4):
+            min_idx = np.where(dists == heapq.nsmallest(i, dists)[-1])  # get the  idx of closest location to goal
+            closest_point = tuple(neighbours[min_idx][0])  # get the cooridnates of the closest point to goal
+            if closest_point in self.road_locations:  # check if the closest point exist on road
+                return closest_point
+
+        print('None of the neighbours are on the road')
+        return None
+
+    def eucledian_distance(self, point_one, point_two):
+        return np.sqrt(np.sum((point_one - point_two) ** 2, axis=1))
+
+    def find_path_to_goal(self):
+        '''
+        Algorithm to find path to goal:
+        1) get neighbours (up, down, left, right) of current location (start locations)
+        2) pick the point x that is cloasest to the goal by eucledian distance and on car road
+        3) append x to our path
+        4) set current location to be our x
+        5) repeat steps 1)-4) until we reach the goal
+        '''
+        path = []
+        current_loc = self.start_loc
+
+        # can finish when we have reached the goal location
+        while not all(current_loc == self.goal_loc):
+            neigh = self.get_neighbours(current_loc)  # get neighbours of the current location
+            loc_in_goal_path = self.closest_point_to_goal(neigh)  # get the closest suitable neighbour of our current location to end
+            path.append(loc_in_goal_path)
+            current_loc = loc_in_goal_path  # set the new location to current location
+        # the goal location should not be in the path
+        return path[:-1]
