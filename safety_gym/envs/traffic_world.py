@@ -1,6 +1,7 @@
 import numpy as np
 import heapq
 import random
+from  more_itertools import unique_everseen
 
 
 class RandomRoads:
@@ -424,5 +425,6 @@ class GoalPath:
             loc_in_goal_path = self.closest_point_to_goal(neigh)  # get the closest suitable neighbour of our current location to end
             path.append(loc_in_goal_path)
             current_loc = loc_in_goal_path  # set the new location to current location
-        # the goal location should not be in the path
-        return path[:-1]
+            print(loc_in_goal_path)
+        # the goal location should not be in the path, preserve all unique locations and their order
+        return list(unique_everseen(path[:-1]))

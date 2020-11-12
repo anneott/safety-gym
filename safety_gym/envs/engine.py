@@ -229,6 +229,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # Fixed locations to override placements, pick randomly a road location to place a goal
         'goal_paths_keepout': 0,  #0.4  # Keepout radius when placing goals
         'goal_paths_size': 0.25,  #0.3 # Radius of the goal area (if using task 'goal')
+        'goal_paths_met_current': np.repeat(True, len(goal_path_locations)), # initialize with Trues
         'goal_paths_met_prev': np.repeat(True, len(goal_path_locations)), #self.goal_paths_met_prev = np.repeat(True, len(self.goal_path_locations))
 
     # Box parameters (only used if task == 'push')
@@ -244,6 +245,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # if reward_distance is 0, then the reward function is sparse
         'reward_distance': 1.0,  # Dense reward multiplied by the distance moved to the goal
         'reward_goal': 1.0,  # Sparse reward for being inside the goal area
+        'goal_path_reward': np.linspace(1, 2, len(goal_path_locations)),  # reward increases incrementally when getting closer to the end goal in the goal path
         'reward_box_dist': 1.0,  # Dense reward for moving the robot towards the box
         'reward_box_goal': 1.0,  # Reward for moving the box towards the goal
         'reward_orientation': False,  # Reward for being upright
@@ -356,8 +358,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # can't find it anywhere else, it's probably set via the config dict
         # and this parse function.
 
-        # initialize if goal paths can sti be visited, following line should be placed somewhere else
-        self.goal_paths_met_prev = np.repeat(True, len(self.goal_path_locations))
+        self.agent_idx = 0  # the location agent is in the goal path
 
         self.parse(config)
         gym.utils.EzPickle.__init__(self, config=config)
@@ -886,7 +887,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         if self.task == 'goal':
             self.build_goal_position()
             self.last_dist_goal = self.dist_goal()
-            self.last_dist_goal_paths = self.dist_goal_paths()
+            self.last_dist_goal_paths =  self.dist_xy(self.goal_path_locations[self.agent_idx]) # distane between agent and the goal location #self.dist_goal_paths()
         elif self.task == 'push':
             self.build_goal_position()
             self.last_dist_goal = self.dist_goal()
@@ -1296,18 +1297,28 @@ class Engine(gym.Env, gym.utils.EzPickle):
         return cost
 
     def goal_path_met(self):
-        ''' Return vector if the goal path location:
-         * has already been visited = NOT visit again (False)
-         * can be still visited (True).
-            Important: only designed for goal.'''
+        """
+        Calculates if the agent is on the goal path.
+        If yes, returns on which location in the path it is.
+        If no, the location is 0, which will give 0 reward.
+        #Return vector if the goal path location:
+        # * has already been visited = NOT visit again (False)
+        # * can be still visited (True).
+        #    Important: only designed for goal.
+        """
         if self.task == 'goal':
             n = len(self.dist_goal_paths())
-            # multiply by already passed goal paths (goal_paths_met_prev), so the 0-s would stay 0-s
-            # otherwise the first locations in path start "cancelling" out the ones close to goal
-            self.goal_paths_met_current = (np.array(self.dist_goal_paths()) >= np.repeat(self.goal_paths_size, n)) * self.goal_paths_met_prev
-            #print('current', self.goal_paths_met_current)
-            #print('prev', self.goal_paths_met_prev)
-            self.goal_paths_met_prev = self.goal_paths_met_current
+
+            agent_loc_boolean = self.dist_goal_paths() <= np.repeat(self.goal_paths_size, n)
+
+            # agent is on the goal path
+            if np.where(agent_loc_boolean)[0].size != 0:
+                agent_loc_idx = np.where(agent_loc_boolean)[0][0]
+            # agent is not on the goal path
+            else:
+                agent_loc_idx = 0  # no reward
+
+            return agent_loc_idx #self.goal_paths_met_prev, self.goal_paths_met_current
 
     def goal_met(self):
         ''' Return true if the current goal is met this step '''
@@ -1380,6 +1391,13 @@ class Engine(gym.Env, gym.utils.EzPickle):
         else:
             self.sim.forward()  # Needed to get sensor readings correct!
 
+            #Keep track, which goal path locations are visited, those won't contribute to reward anymore
+            #numpy array, where: False - should not get reward for visiing, True - should get still reward
+            #self.goal_paths_met_current, self.goal_paths_met_prev = self.goal_path_met()
+            #self.goal_paths_met_prev, self.goal_paths_met_current = self.goal_path_met()
+            self.agent_idx = self.goal_path_met() # location index of agent's current positio
+
+
             # Reward processing
             reward = self.reward()
 
@@ -1392,11 +1410,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
             # On goal path
             #if self.goal_path_met().any():  # at least one location has not been visited
             #    self.goal_path_passed = np.zeros(len(self.goal_path_locations))
-
-            #Keep track, which goal path locations are visited, those won't contribute to reward anymore
-            #numpy array, where: False - should not get reward for visiing, True - should get still reward
-            #self.goal_paths_met_current, self.goal_paths_met_prev = self.goal_path_met()
-            self.goal_path_met()
 
             # Goal processing
             if self.goal_met():
@@ -1434,12 +1447,34 @@ class Engine(gym.Env, gym.utils.EzPickle):
         if self.task in ['goal', 'button']:
             dist_goal = self.dist_goal()
             reward += (self.last_dist_goal - dist_goal) * self.reward_distance
-            # reward += (self.last_dist_goal_green - dist_goal_green + ) * self.reward_distance_green
             self.last_dist_goal = dist_goal
 
             # list of distance from robot to all different goal path locations
-            dist_goal_paths = self.dist_goal_paths()
-            reward += np.sum((np.array(self.last_dist_goal_paths) - np.array(dist_goal_paths)) * self.reward_distance * 0.25)
+            #dist_goal_paths = self.dist_goal_paths()
+
+            # distance from robot to the (closest?) goal path location
+            dist_goal_paths = self.dist_xy(self.goal_path_locations[self.agent_idx])
+            #print('dist_goal_paths ', dist_goal_paths)
+            #print('ag idx', self.agent_idx)
+            #print('last dist goal paths', np.array(self.last_dist_goal_paths))
+            #print('dist goal paths', np.array(dist_goal_paths)),
+            #print('inct rew', self.goal_path_reward[self.agent_idx])
+            #print(self.goal_path_reward)
+
+            # add 0.01, because the location calculations are not always very accurate and therefore can produce negative reward
+            # goal path reward gives incremental reward for staying in goal path
+            #reward += (np.array(self.last_dist_goal_paths)[self.agent_idx]+0.01 - np.array(dist_goal_paths)[self.agent_idx]) * goal_path_reward[self.agent_idx] * self.reward_distance
+
+            if self.agent_idx == 0: # not on goal path
+                reward += (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.reward_distance
+                #print('notgoal',
+                #      (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.reward_distance)
+            else: # on goal path
+                reward += (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.goal_path_reward[self.agent_idx] * self.reward_distance
+                #print('ONgoal', (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.goal_path_reward[self.agent_idx] * self.reward_distance)
+            #print('tot', reward)
+            #print('-'*20)
+            # save the distance as last distance
             self.last_dist_goal_paths = dist_goal_paths
 
         #  Distance from robot to box

@@ -118,6 +118,7 @@ goal_all = {
 goal_constrained = {
     'observe_hazards': True,
     'observe_goal_paths': True,
+    'observe_pillars': True,
     'observe_vases': False,
     'constrain_hazards': True,
     'constrain_pillars': True,  # new
