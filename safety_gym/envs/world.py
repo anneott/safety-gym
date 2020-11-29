@@ -55,7 +55,7 @@ class World:
         'robot_xy': np.zeros(2),  # Robot XY location
         'robot_rot': 0,  # Robot rotation about Z axis
 
-        'floor_size': [3.5, 3.5, .1],  # Used for displaying the floor
+        'floor_size': [3.5, 3.5, .1],  # Used for displaying the floor, overridden somewhere
 
         # Objects -- this is processed and added by the Engine class
         'objects': {},  # map from name -> object dict
@@ -76,7 +76,6 @@ class World:
         self.render_context = render_context
         self.update_viewer_sim = False
         self.robot = Robot(self.robot_base)
-        print('Robot is ', self.robot)
 
     def parse(self, config):
         ''' Parse a config dict - see self.DEFAULT for description '''
@@ -100,7 +99,7 @@ class World:
         dim = self.model.sensor_dim[id]
         return self.data.sensordata[adr:adr + dim].copy()
 
-    # TODO: here already have the floor
+    # here already have the floor
     def build(self):
         ''' Build a world, including generating XML and moving objects '''
         # Read in the base XML (contains robot, camera, floor, etc)
@@ -266,6 +265,35 @@ class World:
         # Add geoms to XML dictionary
         for name, geom in self.geoms.items():
             assert geom['name'] == name, f'Inconsistent {name} {geom}'
+            geom = geom.copy()  # don't modify original object
+            geom['quat'] = rot2quat(geom['rot'])
+            geom['contype'] = geom.get('contype', 1)
+            geom['conaffinity'] = geom.get('conaffinity', 1)
+            body = xmltodict.parse('''
+                <body name="{name}" pos="{pos}" quat="{quat}">
+                    <geom name="{name}" type="{type}" size="{size}" rgba="{rgba}" group="{group}"
+                        contype="{contype}" conaffinity="{conaffinity}"/>
+                </body>
+            '''.format(**{k: convert(v) for k, v in geom.items()}))
+            # Append new body to world, making it a list optionally
+            # Add the object to the world
+            worldbody['body'].append(body['body'])
+
+        # calculate how long is path to goal this time
+        if 'goal_path0' in self.geoms.keys():
+            gp_idxs = sorted([name.replace('goal_path', '') for name in self.geoms.keys() if name.startswith('goal_path')])
+            length = int(gp_idxs[-1])
+        else:
+            length = 100
+
+        # add goal path to XML dict, changes dynamically, therefore justa add a big number
+        for i in range(length):
+            name = 'goal_path' + str(i)
+            geom = {'name': name, 'size': [0.25, 0.025, 0.01], 'pos': [6., 7.5, 0.02], 'rot': 0, 'type': 'cylinder', 'contype': 0, 'conaffinity': 0, 'group': 2, 'rgba': [0.3 , 0.7 , 0.3 , 0.25]}
+
+            if name in self.geoms.keys():
+                continue
+
             geom = geom.copy()  # don't modify original object
             geom['quat'] = rot2quat(geom['rot'])
             geom['contype'] = geom.get('contype', 1)

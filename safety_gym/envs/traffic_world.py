@@ -358,7 +358,6 @@ class Visualize:
         # calculate all the possible coordinates in the grid
         all_points_inside_grid = [(i, j) for j in np.arange(0.0, self.grid_size, 0.5) for i in
                                   np.arange(0.0, self.grid_size, 0.5)]
-        print('nr of all points in grid ', len(all_points_inside_grid))
         # subtract the road coordinates
         return list(set(all_points_inside_grid) - set(self.road_loc) - set(self.ped_road_loc))
 
@@ -366,12 +365,12 @@ class Visualize:
 class GoalPath:
     '''
     Find path (coordinates) that connect start and goal locations.
-    start and goal locations must be numpy arrays with shape (1,2) e.g.  np.array([3.5,1])
+    start and goal locations must be **numpy arrays** with shape (1,2) e.g.  np.array([3.5,1])
     '''
 
     def __init__(self, start_loc, goal_loc, road_locations):
-        self.start_loc = start_loc
-        self.goal_loc = goal_loc
+        self.start_loc = np.around(start_loc * 2.0) / 2.0  # round to closest .5
+        self.goal_loc = np.around(goal_loc * 2.0) / 2.0
         self.road_locations = road_locations
 
     def get_neighbours(self, l):
@@ -401,7 +400,7 @@ class GoalPath:
             if closest_point in self.road_locations:  # check if the closest point exist on road
                 return closest_point
 
-        print('None of the neighbours are on the road')
+        print('\nWARNING: None of the neighbours', neighbours, 'are on the road\n')
         return None
 
     def eucledian_distance(self, point_one, point_two):
@@ -418,13 +417,20 @@ class GoalPath:
         '''
         path = []
         current_loc = self.start_loc
-
+        it = 0
         # can finish when we have reached the goal location
+
+        if all(self.start_loc == self.goal_loc):
+            return [self.start_loc]
+
         while not all(current_loc == self.goal_loc):
             neigh = self.get_neighbours(current_loc)  # get neighbours of the current location
             loc_in_goal_path = self.closest_point_to_goal(neigh)  # get the closest suitable neighbour of our current location to end
             path.append(loc_in_goal_path)
             current_loc = loc_in_goal_path  # set the new location to current location
-            print(loc_in_goal_path)
+
+            it += 1
+            if it > 1000:
+                break
         # the goal location should not be in the path, preserve all unique locations and their order
         return list(unique_everseen(path[:-1]))
