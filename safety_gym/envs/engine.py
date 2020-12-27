@@ -55,7 +55,7 @@ DEFAULT_WIDTH = 256
 DEFAULT_HEIGHT = 256
 
 # Placement limits (min X, min Y, max X, max Y)
-grid_size_max = 8
+grid_size_max = 7#8
 placement_xmin = 0
 placement_ymin = 0
 placement_xmax = grid_size_max
@@ -113,8 +113,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
     # calculate coordinates for visualization
     #try:
-    if True:
-        if roads:
+    if roads:
             vis = Visualize(roads, grid_size=grid_size_max)
             road_locations = vis.calculate_road_locations()
             pedestrian_road_locations = vis.calculate_pedestrian_road_locations()
@@ -123,12 +122,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
             print('\nroad locations\n', road_locations)
             #goal = random.choice(road_locations)
             start = random.choice(road_locations)
-            #goal_path_locations = GoalPath(np.array(start), np.array(goal), road_locations).find_path_to_goal()
+        #goal_path_locations = GoalPath(np.array(start), np.array(goal), road_locations).find_path_to_goal()
 
     # Default configuration (this should not be nested since it gets copied)
     # everything fixed here will NOT change the whole training process
     DEFAULT = {
-        'num_steps': 10000,  # Maximum number of environment steps in an episode
+        'num_steps': 10000, #10000,  # Maximum number of environment steps in an episode
 
         'action_noise': 0.0,  # Magnitude of independent per-component gaussian action noise
 
@@ -140,9 +139,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Robot
         'robot_placements': None,  # Robot placements list (defaults to full extents)
-        'robot_locations': [start], #[np.array(random.choice(sl))],#[np.array(random.choice(road_locations))],#[start_loc], #[random.choice(road_locations), random.choice(road_locations), random.choice(road_locations),
-                           # random.choice(road_locations), random.choice(road_locations), random.choice(road_locations)],#[tuple(map(lambda x: round(x) or x, random.choice(road_locations)))], #,random.choice(road_locations),random.choice(road_locations)],# []  # Explicitly place robot XY coordinate, choose a random place on the road
-        'robot_keepout': 0,#0.4,  # Needs to be set to match the robot XML used
+        'robot_locations': [start],
+        'robot_keepout': 0.1,#0.4,  # Needs to be set to match the robot XML used
         'robot_base': 'xmls/car.xml',  # Which robot XML to use as the base
         'robot_rot': None,  # Override robot starting angle
 
@@ -208,7 +206,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # Goal parameters
         'goal_placements': None,  # Placements where goal may appear (defaults to full extents)
         'goal_locations': [],#[random.choice(goal_locations)],#[],#[np.array(random.choice(road_locations))], #[goal_loc],  # Fixed locations to override placements, pick randomly a road location to place a goal
-        'goal_keepout': 0, #0.4,  # Keepout radius when placing goals
+        'goal_keepout': 0.1, #0.4,  # Keepout radius when placing goals
         'goal_size': 0.3,  #0.3,  # Radius of the goal area (if using task 'goal')
 
         # Path to goal parameters
@@ -907,6 +905,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         ''' Build a new path to goal. Note: Implemented only for task goal.'''
         if self.task == 'goal':
             self.build_goal_path_position()
+            print('build path to goal: goalpaths locs', self.goal_paths_locations, ',agent', self.agent_idx)
             self.last_dist_goal_paths = self.dist_xy(self.goal_paths_locations[self.agent_idx]) # distane between agent and the goal location #self.dist_goal_paths()
 
             #self.last_dist_goal = self.dist_goal()
@@ -921,9 +920,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
         for other_name, other_xy in self.layout.items():
             other_keepout = self.placements[other_name][1]
             dist = np.sqrt(np.sum(np.square(goal_xy - other_xy)))
-            if dist < other_keepout + self.placements_margin + keepout:
+            # or goal and start location are equal => False
+            if dist < other_keepout + self.placements_margin + keepout or \
+                (np.around(goal_xy * 2.0) / 2.0 == list(self.robot_locations[0])).all():
                 return False
         self.layout['goal'] = goal_xy
+        print('Generate new goal', goal_xy)
         return True
 
     def build_goal_path_position(self):
@@ -934,7 +936,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
         new_goal_xy = np.array(self.layout['goal'])
         start_xy = np.array(self.layout['robot'])
         new_goal_path = GoalPath(start_xy, new_goal_xy, self.road_locations).find_path_to_goal()
-
+        print('\nNew goal path is: ', new_goal_path, ', new start', np.around(start_xy * 2.0) / 2.0 , ', new goal', np.around(new_goal_xy * 2.0) / 2.0 )
+        self.goal_path_reward = np.linspace(1, 2, len(new_goal_path))  # reward increases incrementally when getting closer to the end goal in the goal path
         #print('path start', start_xy, 'new goal',  np.around(new_goal_xy * 2.0) / 2.0)
         #print('new goal path\n', new_goal_path)
         #print('old goal paht\n', self.goal_paths_locations)
@@ -965,7 +968,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             goal_path = 'goal_path' + str(i)
             self.world_config_dict['geoms'][goal_path]['pos'][:2] = new_goal_path[i]  # self.layout['goal']
 
-            # TODO were previously in use, but generate error message
+            # TODO were previously in use, but generated error message
             # figure out their true meaning
             #goal_body_id = self.sim.model.body_name2id(goal_path)
             #self.sim.model.body_pos[goal_body_id][:2] = self.layout[goal_path]
@@ -1001,7 +1004,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # Sample object positions, include path to goal
         self.build_layout()
 
-
         # Build the underlying physics world
         self.world_config_dict = self.build_world_config()
 
@@ -1014,6 +1016,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             self.world.rebuild(self.world_config_dict, state=False)
         # Redo a small amount of work, and setup initial goal state
         self.build_goal()
+        self.agent_idx = self.goal_path_met() # update the agent's location, otherwise "IndexError: list index out of range"
         self.build_path_to_goal()
 
         # Save last action
@@ -1359,15 +1362,15 @@ class Engine(gym.Env, gym.utils.EzPickle):
         Calculates if the agent is on the goal path.
         If yes, returns on which location in the path it is.
         If no, the location is 0, which will give 0 reward.
-        #Return vector if the goal path location:
+        # Return vector if the goal path location:
         # * has already been visited = NOT visit again (False)
         # * can be still visited (True).
         #    Important: only designed for goal.
         """
         if self.task == 'goal':
             n = len(self.dist_goal_paths())
-            # 0.15, so would recognize the goal from a bit further
-            agent_loc_boolean = self.dist_goal_paths() <= np.repeat(self.goal_paths_size + 0.15, n)
+            # 0.1, so would recognize the goal from a bit further
+            agent_loc_boolean = self.dist_goal_paths() <= np.repeat(self.goal_paths_size + 0.1, n)
 
             # agent is on the goal path
             if np.where(agent_loc_boolean)[0].size != 0:
@@ -1376,7 +1379,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             else:
                 agent_loc_idx = 0  # no reward
 
-            return agent_loc_idx #self.goal_paths_met_prev, self.goal_paths_met_current
+            return agent_loc_idx  # self.goal_paths_met_prev, self.goal_paths_met_current
 
     def goal_met(self):
         ''' Return true if the current goal is met this step '''
@@ -1443,6 +1446,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 exception = True
                 break
         if exception:
+            print('if exception')
             self.done = True
             reward = self.reward_exception
             info['cost_exception'] = 1.0
@@ -1453,9 +1457,9 @@ class Engine(gym.Env, gym.utils.EzPickle):
             #numpy array, where: False - should not get reward for visiing, True - should get still reward
             #self.goal_paths_met_current, self.goal_paths_met_prev = self.goal_path_met()
             #self.goal_paths_met_prev, self.goal_paths_met_current = self.goal_path_met()
-            self.agent_idx = self.goal_path_met() # location index of agent's current positio
-
-
+            self.agent_idx = self.goal_path_met()  # location index of agent's current positio
+            #if  self.agent_idx != 0:
+            #    print('agent idx', self.agent_idx)
             # Reward processing
             reward = self.reward()
 
@@ -1465,34 +1469,36 @@ class Engine(gym.Env, gym.utils.EzPickle):
             # Button timer (used to delay button resampling)
             self.buttons_timer_tick()
 
-            # On goal path
-            #if self.goal_path_met().any():  # at least one location has not been visited
-            #    self.goal_path_passed = np.zeros(len(self.goal_path_locations))
-
             # Goal processing
             if self.goal_met():
+                print('\n\n\n\n!!!Reached the goal wo update layout!!!\n\n\n\n')
                 info['goal_met'] = True
                 reward += self.reward_goal
                 if self.continue_goal:
                     # Update the internal layout so we can correctly resample (given objects have moved)
-                    self.update_layout()
+                    #self.update_layout() # NEW, otherwise gives error in training the model
                     # Reset the button timer (only used for task='button' environments)
                     self.buttons_timer = self.buttons_resampling_delay
                     # Try to build a new goal, end if we fail
                     if self.terminate_resample_failure:
                         try:
                             self.build_goal()
+                            self.build_path_to_goal()
                         except ResamplingError as e:
                             # Normal end of episode
+                            print('normal end of episode')
                             self.done = True
                     else:
                         # Try to make a goal, which could raise a ResamplingError exception
                         self.build_goal()
+                        self.build_path_to_goal()
                 else:
+                    print('else done')
                     self.done = True
 
         # Timeout
         self.steps += 1
+        #print(self.steps, 'num steps', self.num_steps)
         if self.steps >= self.num_steps:
             self.done = True  # Maximum number of steps in an episode reached
 
@@ -1512,12 +1518,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
             # distance from robot to the (closest?) goal path location
             dist_goal_paths = self.dist_xy(self.goal_paths_locations[self.agent_idx])
-            #print('dist_goal_paths ', dist_goal_paths)
-            #print('ag idx', self.agent_idx)
-            #print('last dist goal paths', np.array(self.last_dist_goal_paths))
-            #print('dist goal paths', np.array(dist_goal_paths)),
-            #print('inct rew', self.goal_path_reward[self.agent_idx])
-            #print(self.goal_path_reward)
 
             # add 0.01, because the location calculations are not always very accurate and therefore can produce negative reward
             # goal path reward gives incremental reward for staying in goal path
@@ -1529,9 +1529,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 #      (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.reward_distance)
             else: # on goal path
                 reward += (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.goal_path_reward[self.agent_idx] * self.reward_distance
-                #print('ONgoal', (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.goal_path_reward[self.agent_idx] * self.reward_distance)
-            #print('tot', reward)
-            #print('-'*20)
             # save the distance as last distance
             self.last_dist_goal_paths = dist_goal_paths
 
