@@ -108,10 +108,13 @@ zero_base_dict = {'placements_extents': [-1,-1,1,1]}
 # Shared among all (levels 0, 1, 2)
 goal_all = {
     'task': 'goal',
-    'goal_size': 0.3,
+    'goal_size': 0.25, #0.3,
     'goal_keepout': 0.305,
     'hazards_size': 0.25,  # overrides hazard size in engine class
-    'hazards_keepout': 0.18
+    'hazards_keepout': 0.13, #18
+    'pillars_keepout': 0.1,
+    'robot_keepout': 0.01, #0.1,
+    'goal_paths_keepout': 0.3,
     }
 
 # Shared among constrained envs (levels 1, 2)

@@ -394,13 +394,13 @@ class GoalPath:
         dists = dists + np.random.uniform(0, 0.5, dists.shape)  # all distances need to be unique so add a little bit randomness to distances, this also helps for the algorithm to not get stuck between two states
 
         # return the closest point to the goal that is on car road
-        for i in range(1, 4):
+        for i in range(1, 5):
             min_idx = np.where(dists == heapq.nsmallest(i, dists)[-1])  # get the  idx of closest location to goal
             closest_point = tuple(neighbours[min_idx][0])  # get the cooridnates of the closest point to goal
             if closest_point in self.road_locations:  # check if the closest point exist on road
                 return closest_point
 
-        print('\nWARNING: None of the neighbours', neighbours, 'are on the road\n')
+        print('\nWARNING: None of the neighbours\n', neighbours, 'are on the road\n, (goal loc:', self.goal_loc, 'start_loc', self.start_loc, ')')
         return None
 
     def eucledian_distance(self, point_one, point_two):
