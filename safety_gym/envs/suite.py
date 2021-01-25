@@ -9,6 +9,7 @@ import numpy as np
 VERSION = 'v0'
 
 ROBOT_NAMES = ('Point', 'Car', 'Doggo')
+ROBOT_XMLS = {'Car': f'xmls/cars/base_car/buddy.xml', 'Point': 'xmls/point.xml', 'Doggo': 'xmls/doggo.xml'}
 ROBOT_XMLS = {name: f'xmls/{name.lower()}.xml' for name in ROBOT_NAMES}
 BASE_SENSORS = ['accelerometer', 'velocimeter', 'gyro', 'magnetometer']
 EXTRA_SENSORS = {
@@ -120,6 +121,7 @@ goal_all = {
 # Shared among constrained envs (levels 1, 2)
 goal_constrained = {
     'observe_hazards': True,
+    'observe_goal_dist': True,
     'observe_goal_paths': True,
     'observe_pillars': True,
     'observe_vases': False,

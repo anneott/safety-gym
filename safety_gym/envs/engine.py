@@ -120,11 +120,14 @@ class Engine(gym.Env, gym.utils.EzPickle):
             pillar_locations = vis.calculate_house_locations()
 
             print('\nroad locations\n', road_locations)
+            #start = np.array([7, 1.5])
+            #goal = np.array([7, 3.5])
+
             #start = random.choice(road_locations)
         #goal_path_locations = GoalPath(np.array(start), np.array(goal), road_locations).find_path_to_goal()
 
     # Default configuration (this should not be nested since it gets copied)
-    # everything fixed here will NOT change the whole training process
+    # everything fixed here will NOT change during the whole training process
     DEFAULT = {
         'num_steps': 10000,# Maximum number of environment steps in an episode
 
@@ -140,7 +143,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'robot_placements': None,  # Robot placements list (defaults to full extents)
         'robot_locations': [], #[start],
         'robot_keepout': 0.1,#,3,  # Needs to be set to match the robot XML used
-        'robot_base': 'xmls/car.xml',  # Which robot XML to use as the base
+        'robot_base': 'xmls/cars/base_car/car1.xml',#'xmls/car.xml',# #  # Which robot XML to use as the base
         'robot_rot': None,  # Override robot starting angle
 
         # Starting position distribution
@@ -156,7 +159,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'observe_sensors': True,  # Observe all sensor data from simulator
         'observe_goal_dist': True,  # Observe the distance to the goal # DEFAULT is False
         'observe_goal_comp': False,  # Observe a compass vector to the goal
-        'observe_goal_lidar': False,  # Observe the goal with a lidar sensor # DEFAULT is False
+        'observe_goal_lidar': True,  # Observe the goal with a lidar sensor # DEFAULT is False
         'observe_box_comp': False,  # Observe the box with a compass
         'observe_box_lidar': False,  # Observe the box with a lidar
         'observe_circle': False,  # Observe the origin with a lidar
@@ -209,7 +212,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'goal_size': 0.3,  #0.3,  # Radius of the goal area (if using task 'goal')
 
         # Path to goal parameters
-        'goal_paths_num': 0,#len(GoalPath(np.array(random.choice(sl)), np.array(random.choice(gl)), road_locations).find_path_to_goal()), #len(GoalPath(start_loc, goal_loc, road_locations).find_path_to_goal()),
+        'goal_paths_num': 1,#len(GoalPath(np.array(random.choice(sl)), np.array(random.choice(gl)), road_locations).find_path_to_goal()), #len(GoalPath(start_loc, goal_loc, road_locations).find_path_to_goal()),
         'goal_paths_placements': None,  # Placements where goal may appear (defaults to full extents)
         'goal_paths_locations': [], #GoalPath(np.array(random.choice(sl)), np.array(random.choice(gl)), road_locations).find_path_to_goal(), # GoalPath(start_loc, goal_loc, road_locations).find_path_to_goal(), #goal_path_locations,
         # Fixed locations to override placements, pick randomly a road location to place a goal
@@ -229,13 +232,13 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # Reward is distance towards goal plus a constant for being within range of goal
         # reward_distance should be positive to encourage moving towards the goal
         # if reward_distance is 0, then the reward function is sparse
-        'reward_distance': 3, #1.0,  # Dense reward multiplied by the distance moved to the goal
+        'reward_distance': 1.0,  # Dense reward multiplied by the distance moved to the goal
         'reward_goal': 1.0,  # Sparse reward for being inside the goal area
         'goal_path_reward': 0, # updated in the end, np.linspace(1, 2, len(GoalPath(np.array(random.choice(road_locations)), np.array(random.choice(road_locations)), road_locations).find_path_to_goal())), #np.linspace(1, 2, len(goal_path_locations)),  # reward increases incrementally when getting closer to the end goal in the goal path
         'reward_box_dist': 1.0,  # Dense reward for moving the robot towards the box
         'reward_box_goal': 1.0,  # Reward for moving the box towards the goal
         'reward_orientation': True, #False,  # Reward for being upright
-        'reward_orientation_scale': 0.002,  # Scale for uprightness reward
+        'reward_orientation_scale': 0.2,  # Scale for uprightness reward, default = 0.002
         'reward_orientation_body': 'robot',  # What body to get orientation from
         'reward_exception': -10.0,  # Reward when encoutering a mujoco exception
         'reward_x': 1.0,  # Reward for forward locomotion tests (vel in x direction)
@@ -343,7 +346,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # can't find it anywhere else, it's probably set via the config dict
         # and this parse function.
 
-        self.agent_idx = 0  # the location agent is in the goal path
+        self.agent_idx = -1  # the location agent is in the goal path (goal_paths_locations)
 
         self.parse(config)
 
@@ -437,9 +440,17 @@ class Engine(gym.Env, gym.utils.EzPickle):
         return [self.data.get_body_xpos(f'hazard{i}').copy() for i in range(self.hazards_num)]
 
     @property
-    def goal_paths_pos(self):
-        ''' Helper to get the goal paths positions from layout '''
-        return [self.data.get_body_xpos(f'goal_path{i}').copy() for i in range(self.goal_paths_num)]
+    def goal_paths_pos(self): #, idx=-1):
+        # TODO restore to original
+        ''' Helper to get the goal paths positions from layout.
+        If idx is >= 0, return the position of the index.
+        Otherwise return the first position.
+        '''
+        if self.agent_idx >= 0:
+            return [self.data.get_body_xpos('goal_path' + str(self.agent_idx)).copy()]
+        return [self.data.get_body_xpos('goal_path0').copy()] #[self.data.get_body_xpos(f'goal_path{i}').copy() for i in range(self.goal_paths_num)]
+        # old
+        #return [self.data.get_body_xpos(f'goal_path{i}').copy() for i in range(self.goal_paths_num)]
 
     @property
     def walls_pos(self):
@@ -520,7 +531,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             obs_space_dict['pillars_lidar'] = gym.spaces.Box(0.0, 1.0, (self.lidar_num_bins,), dtype=np.float32)
         if self.buttons_num and self.observe_buttons:
             obs_space_dict['buttons_lidar'] = gym.spaces.Box(0.0, 1.0, (self.lidar_num_bins,), dtype=np.float32)
-        if self.goal_paths_num and self.observe_goal_paths:
+        if self.observe_goal_paths:
             obs_space_dict['goal_paths_lidar'] = gym.spaces.Box(0.0, 1.0, (self.lidar_num_bins,), dtype=np.float32)
         if self.observe_qpos:
             obs_space_dict['qpos'] = gym.spaces.Box(-np.inf, np.inf, (self.robot.nq,), dtype=np.float32)
@@ -608,6 +619,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         ''' Build a dict of placements.  Happens once during __init__. '''
         # Dictionary is map from object name -> tuple of (placements list, keepout)
         if self.goal_paths_num:
+            print('placements dict', self.placements_dict_from_object('goal_path'))
             self.placements.update(self.placements_dict_from_object('goal_path'))
 
 
@@ -914,7 +926,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
         ''' Build a new path to goal. Note: Implemented only for task goal.'''
         if self.task == 'goal':
             self.build_goal_path_position()
-            self.last_dist_goal_paths = self.dist_xy(self.goal_paths_locations[self.agent_idx]) # distance between agent and the goal location #self.dist_goal_paths()
+            self.last_dist_to_cur_goal_path = self.dist_goal_cur_goal_path()
+            #self.last_dist_goal_paths = self.dist_xy(self.goal_paths_locations[self.agent_idx]) # distance between agent and the goal location #self.dist_goal_paths()
         else:
             pass
 
@@ -937,47 +950,73 @@ class Engine(gym.Env, gym.utils.EzPickle):
         self.layout['goal'] = goal_xy
         return True
 
-    def build_goal_path_position(self):
-        ''' Build a NEW goal position, maybe with resampling due to hazards '''
-        # Resample until goal is compatible with layout
+    def update_goal_path_position(self):
+        '''
+        Goal path is displayed one by one based on the agent location.
+        If agent has advanced one location, updated the goal path postion, so a new one appears.
+        '''
 
-        # create new goal path
-        new_goal_xy = np.array(self.layout['goal'])
-        start_xy = np.array(self.layout['robot']) #np.array(self.start) #self.layout['robot'])
-        new_goal_path = GoalPath(start_xy, new_goal_xy, self.road_locations).find_path_to_goal()
-        print('\nNew goal path is: ', new_goal_path, ', new start', np.around(start_xy * 2.0) / 2.0 , ', new goal', np.around(new_goal_xy * 2.0) / 2.0 )
-        self.goal_path_reward = np.linspace(1, 2, len(new_goal_path))  # reward increases incrementally when getting closer to the end goal in the goal path
+        # make the next circle appear on the path to goal
+        i = self.agent_idx
 
-        # number of elements in new goal path is different than in old path
-        diff = len(new_goal_path) - len(self.goal_paths_locations)
-        # add elements to path
-        if diff > 0:
-            length = len(self.goal_paths_locations)
-            for i in range(length, length + diff):
-                self.layout['goal_path' + str(i)] = new_goal_path[i]  # need some random values to add
-                self.world_config_dict['geoms']['goal_path' + str(i)] = {'name': 'goal_path' + str(i), 'size': [0.25, 0.025, 0.01], 'pos': np.array([1.50000000e+00, -1.10936632e-10, 2.00000000e-02]), 'rot': 0, 'type': 'cylinder', 'contype': 0, 'conaffinity': 0, 'group': 2, 'rgba': np.array([0.3 , 0.7 , 0.3 , 0.25])} #self.world_config_dict['geoms']['goal_path0']
-        # remove elements from path
-        elif diff < 0:
-            # delete the extra path elements
-            length = len(self.goal_paths_locations)
-            for i in range(length - abs(diff), length):
-                del self.layout['goal_path' + str(i)]
-                del self.world_config_dict['geoms']['goal_path' + str(i)]
+        # are there still circles/locations left in goal path?
+        if i <= len(self.goal_paths_locations):
+            # delete previous goal path circle
+            existing_goal_paths = [g for g in self.world_config_dict['geoms'] if g.startswith('goal_path')]
+            for goal_path in existing_goal_paths:
+                del self.layout[goal_path]
+                del self.world_config_dict['geoms'][goal_path]
 
-        self.goal_paths_locations = new_goal_path
-        self.goal_paths_num = len(new_goal_path)
-        self.build_goal_paths_placements_dict()
-
-        # Move goal geom to new layout position
-        # self.world_config_dict['geoms']['goal']['pos'][:2] = self.layout['goal'] # old
-        for i in range(len(new_goal_path)):
-            goal_path = 'goal_path' + str(i)
-            self.world_config_dict['geoms'][goal_path]['pos'][:2] = new_goal_path[i]
+            # NOT last element in goal path, still need to add new goal path elements
+            # if it is the last element, then the previous deleting was enough and we just need to wait for the car to reach actual goal
+            if self.agent_idx + 1 <= len(self.goal_paths_locations):
+                print('!!! Reached one goal path, next goal path is: loc', self.goal_paths_locations[i], ' idx', i, '!!!')
+                goal_path = 'goal_path' + str(i)
+                print('Adding new goal path', goal_path)
+                self.layout[goal_path] = self.goal_paths_locations[i]
+                self.world_config_dict['geoms'][goal_path] = {'name': goal_path, 'size': [0.25, 0.025, 0.01], 'pos': np.array([1.50000000e+00, -1.10936632e-10, 2.00000000e-02]), 'rot': 0, 'type': 'cylinder', 'contype': 0, 'conaffinity': 0, 'group': 2, 'rgba': np.array([0.3 , 0.7 , 0.3 , 0.25])} #self.world_config_dict['geoms']['goal_path0']
+                # Move goal geom to new layout position
+                self.world_config_dict['geoms'][goal_path]['pos'][:2] = self.goal_paths_locations[i]
 
             # TODO were previously in use, but generated error message
             # figure out their true meaning
-            # goal_body_id = self.sim.model.body_name2id(goal_path)
-            # self.sim.model.body_pos[goal_body_id][:2] = self.layout[goal_path]
+            #goal_body_id = self.sim.model.body_name2id(goal_path)
+            #self.sim.model.body_pos[goal_body_id][:2] = self.layout[goal_path]
+
+            self.sim.forward()
+            self.world.rebuild(deepcopy(self.world_config_dict))
+            self.update_viewer_sim = True
+
+    def build_goal_path_position(self):
+        ''' Build a NEW goal position, maybe with resampling due to hazards
+        Once for every goal path.
+        '''
+        # Resample until goal is compatible with layout
+        # create new goal path
+        self.agent_idx = -1  # the location agent is in the goal path (goal_paths_locations)
+        new_goal_xy = np.array(self.layout['goal'])
+        start_xy = np.array(self.layout['robot']) #np.array(self.start) #self.layout['robot'])
+        new_goal_path = GoalPath(start_xy, new_goal_xy, self.road_locations).find_path_to_goal()
+        self.goal_paths_num = 1 #len(new_goal_path)
+        print('\nNew goal path is: ', new_goal_path, ',len ', self.goal_paths_num, 'new start', np.around(start_xy * 2.0) / 2.0 , ', new goal', np.around(new_goal_xy * 2.0) / 2.0 )
+        self.goal_path_reward = np.linspace(1, 2, len(new_goal_path))  # reward increases incrementally when getting closer to the end goal in the goal path
+
+        # make the FIRST circle appear on the path to goal
+        first_path_loc = new_goal_path[0]
+        print('First loc', first_path_loc)
+        self.layout['goal_path0'] = first_path_loc  # need some random values to add
+        self.world_config_dict['geoms']['goal_path0'] = {'name': 'goal_path0', 'size': [0.25, 0.025, 0.01], 'pos': np.array([1.50000000e+00, -1.10936632e-10, 2.00000000e-02]), 'rot': 0, 'type': 'cylinder', 'contype': 0, 'conaffinity': 0, 'group': 2, 'rgba': np.array([0.3 , 0.7 , 0.3 , 0.25])} #self.world_config_dict['geoms']['goal_path0']
+        # Move goal geom to new layout position
+        self.world_config_dict['geoms']['goal_path0']['pos'][:2] = first_path_loc
+
+        self.goal_paths_locations = new_goal_path
+        self.build_goal_paths_placements_dict()
+
+
+            # TODO were previously in use, but generated error message
+            # figure out their true meaning
+        #goal_body_id = self.sim.model.body_name2id(goal_path)
+        #self.sim.model.body_pos[goal_body_id][:2] = self.layout[goal_path]
 
         self.sim.forward()
         self.world.rebuild(deepcopy(self.world_config_dict))
@@ -1023,17 +1062,20 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # sometimes goal is too close to robot and goal_paths_locations = [], so the code runs into error
         # sample goals until suitable is found
-        goal_built = None
-        while goal_built is None:
-            try:
+        # goal_built = None
+        #while goal_built is None:
+            #try:
                 # Redo a small amount of work, and setup initial goal state
-                self.build_goal()
-                self.agent_idx = self.goal_path_met()  # update the agent's location, otherwise "IndexError: list index out of range"
-                self.build_path_to_goal()
-                goal_built = True
-            except:
-                print('Goal is not suitable, and path to goal is []')
-                pass
+        self.build_goal()
+        #self.agent_idx = self.goal_path_met()  # update the agent's location, otherwise "IndexError: list index out of range"
+        self.build_path_to_goal()
+        #if self.goal_path_met():
+        #self.update_goal_path_position()
+
+        #goal_built = True
+            #except:
+            #    print('Goal is not suitable, and path to goal is []')
+            #    pass
 
         # Save last action
         self.last_action = np.zeros(self.action_space.shape)
@@ -1067,6 +1109,22 @@ class Engine(gym.Env, gym.utils.EzPickle):
     def dist_goal(self):
         ''' Return the distance from the robot to the goal XY position '''
         return self.dist_xy(self.goal_pos)
+
+    def dist_goal_cur_goal_path(self):
+        ''' Return the distance from the robot to the current goal path XY position '''
+        if not len(self.goal_paths_locations):
+            return 999
+        elif len(self.goal_paths_locations) > self.agent_idx:
+            # on goal path, return the distance to the next goal path location
+            if self.agent_idx >= 0:
+                return self.dist_xy(self.goal_paths_locations[self.agent_idx])
+            # not on goal path, return the distance to the goal path start
+            return self.dist_xy(self.goal_paths_locations[0])
+        # already all goal path elements have been passed, return distance to actual goal
+        else:
+            #print('All goal path passed!!')
+            return self.dist_xy(self.goal_pos)
+
 
     def dist_goal_paths(self):
         ''' Return the distance from the robot to all the goal path XY position '''
@@ -1276,6 +1334,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
         if self.pillars_num and self.observe_pillars:
             obs['pillars_lidar'] = self.obs_lidar(self.pillars_pos, GROUP_PILLAR)
         if self.observe_goal_paths:
+            # TODO NEW
+            #print('LIDAR ', self.goal_paths_pos)
             obs['goal_paths_lidar'] = self.obs_lidar(self.goal_paths_pos, GROUP_GOAL_PATH)
         if self.buttons_num and self.observe_buttons:
             # Buttons observation is zero while buttons are resetting
@@ -1319,6 +1379,9 @@ class Engine(gym.Env, gym.utils.EzPickle):
         buttons_constraints_active = self.constrain_buttons and (self.buttons_timer == 0)
         for contact in self.data.contact[:self.data.ncon]:
             geom_ids = [contact.geom1, contact.geom2]
+            #for g in geom_ids:
+            #    print(g)
+            #    print(self.model.geom_id2name(g))
             geom_names = sorted([self.model.geom_id2name(g) for g in geom_ids])
             if self.constrain_vases and any(n.startswith('vase') for n in geom_names):
                 if any(n in self.robot.geom_names for n in geom_names):
@@ -1374,26 +1437,22 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
     def goal_path_met(self):
         """
-        Calculates if the agent is on the goal path.
-        If yes, returns on which location in the path it is.
-        If no, the location is -1, which will give 0 reward.
+        Calculates if the agent is on the current location of goal path.
+        If yes, advance one step in path.
         """
         if self.task == 'goal':
-            n = len(self.dist_goal_paths())
             # 0.1, so would recognize the goal from a bit further
-            #print('dist goal paths', np.array(self.dist_goal_paths()), type(np.array(self.dist_goal_paths())))
-            #print('goal paths size',  np.repeat(self.goal_paths_size + 0.2, n), type(np.repeat(self.goal_paths_size + 0.2, n)))
-            agent_loc_boolean = (np.array(self.dist_goal_paths())) <= (np.repeat(self.goal_paths_size + 0.2, n))
-            #print('agent loc bool', agent_loc_boolean) #, (np.array(self.dist_goal_paths()))[0] <= (np.repeat(self.goal_paths_size + 0.1, n))[0])
-            # agent is on the goal path
-            if np.where(agent_loc_boolean)[0].size != 0:
-                agent_loc_idx = np.where(agent_loc_boolean)[0][0]
-                #print(agent_loc_idx, ' - YES reward agent loc idx')
-            # agent is not on the goal path
+            # agent on the goal path
+            # still on the goal path
+            if self.agent_idx + 1 <= len(self.goal_paths_locations):
+                goal_path_met = self.dist_goal_cur_goal_path() <= (self.goal_paths_size + 0.05)
+                # agent advanced one step on path, if there is any path left
+                if goal_path_met:
+                    self.agent_idx += 1
+                return goal_path_met
             else:
-                agent_loc_idx = -1  # no reward
-
-            return agent_loc_idx  # self.goal_paths_met_prev, self.goal_paths_met_current
+                #print('Whole goal path has been passed')
+                return True
 
     def goal_met(self):
         ''' Return true if the current goal is met this step '''
@@ -1470,9 +1529,14 @@ class Engine(gym.Env, gym.utils.EzPickle):
             #numpy array, where: False - should not get reward for visiing, True - should get still reward
             #self.goal_paths_met_current, self.goal_paths_met_prev = self.goal_path_met()
             #self.goal_paths_met_prev, self.goal_paths_met_current = self.goal_path_met()
-            self.agent_idx = self.goal_path_met()  # location index of agent's current positio
-            #if  self.agent_idx != 0:
-            #    print('agent idx', self.agent_idx)
+
+            self.prev_agent_idx = self.agent_idx
+            # if agent moved on the goal path further (not backwards) then
+            # based on agent idx, update the view and create the next goal path location circle
+            #print('cur vs prev agent',  self.agent_idx, self.prev_agent_idx)
+            if self.goal_path_met() and self.agent_idx > self.prev_agent_idx:
+                #print('Updating goal path location')
+                self.update_goal_path_position()
             # Reward processing
             reward = self.reward()
 
@@ -1522,33 +1586,36 @@ class Engine(gym.Env, gym.utils.EzPickle):
         if self.task in ['goal', 'button']:
             dist_goal = self.dist_goal()
             reward += (self.last_dist_goal - dist_goal) * self.reward_distance
-            #print('end goal rew:', (self.last_dist_goal - dist_goal) * self.reward_distance)
             self.last_dist_goal = dist_goal
 
-            # list of distance from robot to all different goal path locations
-            #dist_goal_paths = self.dist_goal_paths()
-
-            # distance from robot to the (closest?) goal path location
-            dist_goal_paths = self.dist_xy(self.goal_paths_locations[self.agent_idx])
+            # distance from robot to the next goal path location (idx + 1)
+            dist_to_cur_goal_path = self.dist_goal_cur_goal_path() #self.dist_xy(self.goal_paths_locations[self.agent_idx + 1])
+            #print('dist to current goal path', dist_to_cur_goal_path)
 
             # add 0.01, because the location calculations are not always very accurate and therefore can produce negative reward
             # goal path reward gives incremental reward for staying in goal path
-            #reward += (np.array(self.last_dist_goal_paths)[self.agent_idx]+0.01 - np.array(dist_goal_paths)[self.agent_idx]) * goal_path_reward[self.agent_idx] * self.reward_distance
-
             if self.agent_idx == -1:  # not on goal path
-                reward += (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.reward_distance
-                #print('- not goal path',
-                #      (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.reward_distance)
-            else: # on goal path, goal path reward increases incrementally (self.goal_path_reward[self.agent_idx])
-                reward += (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.goal_path_reward[self.agent_idx] * self.reward_distance
-                # first element can turn negatie
-                #print('- goal path', (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)), '*', self.goal_path_reward[
+                reward += (self.last_dist_to_cur_goal_path - dist_to_cur_goal_path) * self.reward_distance
+                    #(np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.reward_distance
+                #print('- not goal path')
+                     # (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.reward_distance)
+            # whole goal path has been passed, give maximum reward of goal_path_reward (only once!)
+            elif self.agent_idx == len(self.goal_paths_locations) and self.agent_idx != self.prev_agent_idx:
+                #print('Whole path should have been passed')
+                reward += (self.last_dist_to_cur_goal_path - dist_to_cur_goal_path) * self.goal_path_reward[-1] *self.reward_distance
+            elif self.agent_idx < len(self.goal_paths_locations) : # on goal path, goal path reward increases incrementally
+                reward += (self.last_dist_to_cur_goal_path - dist_to_cur_goal_path) * self.goal_path_reward[self.agent_idx] * self.reward_distance
+            # the whole goal path has been passed, no more reward for goal path anymore
+            #else:
+            #    print('No more reward for goal path!')
+                    #(np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) * self.goal_path_reward[self.agent_idx] * self.reward_distance
+                # first element can turn negative (comapring two floats)
+                #print('- goal path', self.agent_idx) # , ', rew:',  (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)), '*', self.goal_path_reward[
                 #    self.agent_idx], '*', self.reward_distance)
-                #print('!! goal path', self.agent_idx, (np.array(self.last_dist_goal_paths) + 0.001 - np.array(dist_goal_paths)) *
-                #      self.goal_path_reward[self.agent_idx] *  self.reward_distance)
+
             #print('- cum rew:', reward)
             # save the distance as last distance
-            self.last_dist_goal_paths = dist_goal_paths
+            self.last_dist_to_cur_goal_path = dist_to_cur_goal_path
 
         #  Distance from robot to box
         if self.task == 'push':

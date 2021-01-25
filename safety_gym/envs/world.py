@@ -33,7 +33,6 @@ TODO:
 # Default location to look for /xmls folder:
 BASE_DIR = os.path.dirname(safety_gym.__file__)
 
-
 def convert(v):
     ''' Convert a value into a string for mujoco XML '''
     if isinstance(v, (int, float, str)):
@@ -51,7 +50,7 @@ class World:
     # Default configuration (this should not be nested since it gets copied)
     # *NOTE:* Changes to this configuration should also be reflected in `Engine` configuration
     DEFAULT = {
-        'robot_base': 'xmls/car.xml',  # Which robot XML to use as the base
+        'robot_base': 'xmls/cars/base_car/car1.xml',#"'xmls/car.xml', # 'xmls/cars/base_car/buddy.xml',   # Which robot XML to use as the base
         'robot_xy': np.zeros(2),  # Robot XY location
         'robot_rot': 0,  # Robot rotation about Z axis
 
