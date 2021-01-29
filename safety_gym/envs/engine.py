@@ -232,12 +232,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # if reward_distance is 0, then the reward function is sparse
         'reward_distance': 1.0,  # Dense reward multiplied by the distance moved to the goal
         'reward_goal': 1.0,  # Sparse reward for being inside the goal area
-        'reward_distance_goal_path': 0.5, # Dense reward multipleid by the distance move to the next goal path circle
+        'reward_distance_goal_path': 0.8, # Dense reward multipleid by the distance move to the next goal path circle
         'goal_path_reward': 0, # reward increases incrementally when getting closer to the end goal in the goal path
         'reward_box_dist': 1.0,  # Dense reward for moving the robot towards the box
         'reward_box_goal': 1.0,  # Reward for moving the box towards the goal
         'reward_orientation': True, #False,  # Reward for being upright
-        'reward_orientation_scale': 0.2,  # Scale for uprightness reward, default = 0.002
+        'reward_orientation_scale': 0.5,  # Scale for uprightness reward, default = 0.002
         'reward_orientation_body': 'robot',  # What body to get orientation from
         'reward_exception': -10.0,  # Reward when encoutering a mujoco exception
         'reward_x': 1.0,  # Reward for forward locomotion tests (vel in x direction)
@@ -456,9 +456,16 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # whole goal path passed already
         elif self.agent_idx >= len(self.goal_paths_locations):
             return [self.goal_pos]
-        return [self.data.get_body_xpos('goal_path0').copy()]
+        # agent not on the goal path
+        elif self.agent_idx < 0:
+            # 1) it previously was on goal path => return the last (max) known goal path pos
+            if self.goal_paths_num:
+                max_el = [i for i in range(self.goal_paths_num)][-1]
+                return [self.data.get_body_xpos(f'goal_path{max_el}').copy()] #[self.data.get_body_xpos(f'goal_path{i}').copy() for i in range(self.goal_paths_num)]
+            # 2) it has never been on goal path => should return goal_path0
+            return [self.data.get_body_xpos('goal_path0').copy()]
 
-        # #on goal path
+    # #on goal path
         # if len(self.goal_paths_locations) > self.agent_idx >= 0:
         #     return [self.data.get_body_xpos(f'goal_path{self.agent_idx}').copy()]
         # # not on goal path
@@ -989,14 +996,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
             existing_goal_paths = [g for g in self.world_config_dict['geoms'] if g.startswith('goal_path')]
             #print('exitsing goal paths', existing_goal_paths, ', deleting', 'goal_path' + str(self.agent_idx-1))
             #for goal_path in existing_goal_paths:
-            #goal_path = 'goal_path' + str(i)  # if i > 0 else 'goal_path0'
             #    del self.layout[goal_path]
             #    del self.world_config_dict['geoms'][goal_path]
 
            # NOT last element in goal path, still need to add new goal path elements
             # if it is the last element, then the previous deleting was enough and we just need to wait for the car to reach actual goal
             if self.agent_idx + 1 <= len(self.goal_paths_locations):
-                #print('exitsing goal paths', existing_goal_paths, ', deleting', 'goal_path' + str(self.agent_idx - 1))
                 try:
                     print('!!! Reached one goal path, next goal path is: loc',
                           self.goal_paths_locations[self.agent_idx],
