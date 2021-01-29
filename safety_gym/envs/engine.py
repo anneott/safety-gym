@@ -1110,14 +1110,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         self.build_goal()
         #self.agent_idx = self.goal_path_met()  # update the agent's location, otherwise "IndexError: list index out of range"
         self.build_path_to_goal()
-        #if self.goal_path_met():
-        #self.update_goal_path_position()
-
-        #goal_built = True
-            #except:
-            #    print('Goal is not suitable, and path to goal is []')
-            #    pass
-
+        
         # Save last action
         self.last_action = np.zeros(self.action_space.shape)
 
