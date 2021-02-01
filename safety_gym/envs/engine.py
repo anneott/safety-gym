@@ -121,7 +121,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
             print('\nroad locations\n', road_locations)
             start = np.array([7, 1.5])
-            goal = np.array([7, 2.5])
+            goal = np.array([7, 3])
 
             #start = random.choice(road_locations)
         #goal_path_locations = GoalPath(np.array(start), np.array(goal), road_locations).find_path_to_goal()
@@ -232,12 +232,13 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # if reward_distance is 0, then the reward function is sparse
         'reward_distance': 1.0,  # Dense reward multiplied by the distance moved to the goal
         'reward_goal': 1.0,  # Sparse reward for being inside the goal area
-        'reward_distance_goal_path': 0.8, # Dense reward multipleid by the distance move to the next goal path circle
-        'goal_path_reward': 0, # reward increases incrementally when getting closer to the end goal in the goal path
+        'reward_distance_goal_path': 0.8,  # Dense reward multipleid by the distance move to the next goal path circle
+        'goal_path_reward': 0, # specified later, reward increases incrementally when getting closer to the end goal in the goal path
+        'reward_early_finish': 0.001, # reward if the agent completes the goal earlier than num_steps (total_steps - steps_made) * reward_early_finish
         'reward_box_dist': 1.0,  # Dense reward for moving the robot towards the box
         'reward_box_goal': 1.0,  # Reward for moving the box towards the goal
-        'reward_orientation': True, #True, #False,  # Reward for being upright
-        'reward_orientation_scale': 0.002,#0.002,  # Scale for uprightness reward, default = 0.002. Note: be careful with raising it too much (more than 0.1)
+        'reward_orientation': False, #True, #False,  # Reward for being upright
+        'reward_orientation_scale': 0.5, #0.002,#0.002,  # Scale for uprightness reward, default = 0.002. Note: be careful with raising it too much (more than 0.1)
         'reward_orientation_body': 'robot',  # What body to get orientation from
         'reward_exception': -10.0,  # Reward when encoutering a mujoco exception
         'reward_x': 1.0,  # Reward for forward locomotion tests (vel in x direction)
@@ -286,7 +287,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'hazards_num': len(pedestrian_road_locations),# Number of hazards in an environment
         'hazards_placements': None, #[(0,5,10,20) ],  # Placements list for hazards (defaults to full extents)
         'hazards_locations': pedestrian_road_locations,  # Fixed locations to override placements
-        'hazards_keepout': 0.3, #0.3,  # Radius of hazard keepout for placement
+        'hazards_keepout': 0, #.3, #0.3,  # Radius of hazard keepout for placement
         'hazards_size': 10000, #5000,  # Radius of hazards
         'hazards_cost': 1.0,  # Cost (per step) for violating the constraint
 
@@ -318,12 +319,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'pillars_cost': 1.0,  # Cost (per step) for being in contact with a pillar
 
         # Gremlins (moving objects we should avoid)
-        'gremlins_num': 0,  # Number of gremlins in the world
+        'gremlins_num': 1,  # Number of gremlins in the world
         'gremlins_placements': None,  # Gremlins placements list (defaults to full extents)
-        'gremlins_locations': [],  # Fixed locations to override placements
-        'gremlins_keepout': 0.5,  # Radius for keeping out (contains gremlin path)
+        'gremlins_locations': [random.choice(pedestrian_road_locations)],  # Fixed locations to override placements
+        'gremlins_keepout': 0, #0.5,  # Radius for keeping out (contains gremlin path)
         'gremlins_travel': 0.3,  # Radius of the circle traveled in
-        'gremlins_size': 0.1,  # Half-size (radius) of gremlin objects
+        'gremlins_size': 0.05, #0.1,  # Half-size (radius) of gremlin objects
         'gremlins_density': 0.001,  # Density of gremlins
         'gremlins_contact_cost': 1.0,  # Cost for touching a gremlin
         'gremlins_dist_threshold': 0.2,  # Threshold for cost for being too close
@@ -1039,10 +1040,10 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # create new goal path
         self.agent_idx = -1  # the location agent is in the goal path (goal_paths_locations)
         new_goal_xy = np.array(self.layout['goal'])
-        start_xy = np.array(self.layout['robot']) #np.array(self.start) #self.layout['robot'])
+        start_xy = np.array(self.layout['robot'])
         new_goal_path = GoalPath(start_xy, new_goal_xy, self.road_locations).find_path_to_goal()
         self.goal_paths_num = 0 #len(new_goal_path)
-        print('\nNew goal path is: ', new_goal_path, 'new start', np.around(start_xy * 2.0) / 2.0 , ', new goal', np.around(new_goal_xy * 2.0) / 2.0 )
+        print('\nNew goal path is: ', new_goal_path, 'new start', np.around(start_xy * 2.0) / 2.0, ', new goal', np.around(new_goal_xy * 2.0) / 2.0 )
         self.goal_path_reward = np.linspace(1, 2, len(new_goal_path))  # reward increases incrementally when getting closer to the end goal in the goal path
 
         # make the FIRST circle appear on the path to goal
@@ -1164,7 +1165,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
     def dist_goal_paths(self):
         ''' Return the distance from the robot to all the goal path XY position '''
-        print('Dist goal paths')
         return [self.dist_xy(path_loc) for path_loc in self.goal_paths_locations]
 
     def dist_box(self):
@@ -1371,9 +1371,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
         if self.pillars_num and self.observe_pillars:
             obs['pillars_lidar'] = self.obs_lidar(self.pillars_pos, GROUP_PILLAR)
         if self.observe_goal_paths:
-            # TODO NEW
-            #print('LIDAR ', self.goal_paths_pos)
-            #print('LIDAR idx', self.agent_idx)
             obs['goal_paths_lidar'] = self.obs_lidar(self.goal_paths_pos, GROUP_GOAL_PATH)
         if self.buttons_num and self.observe_buttons:
             # Buttons observation is zero while buttons are resetting
@@ -1485,8 +1482,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                     self.agent_idx += 1
                 return goal_path_met
             else:
-                #print('Whole goal path has been passed')
-                # TODO not in use yet
+                # TODO not in use yet everywhere
                 self.whole_goal_path_passed = True
                 return True
 
@@ -1584,12 +1580,12 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
             # Goal processing
             if self.goal_met():
-                print('\n\n\n\n!!!Reached the goal without update layout!!!\n\n\n\n')
+                print('\n\n\n\n!!!Reached the goal!!!\n\n\n\n')
                 info['goal_met'] = True
                 reward += self.reward_goal
-                # the earlier goal is reached, the bigger the reward
-                reward += (self.num_steps - self.steps) * self.reward_orientation_scale
-                print('Finishing early reward:', (self.num_steps - self.steps) * self.reward_orientation_scale)
+                # the earlier goal is reached, the bigger the reward (otherwise agent learns to wait with reaching the end goal)
+                print('Finishing early reward:', (self.num_steps - self.steps) * self.reward_early_finish)
+                reward += (self.num_steps - self.steps) * self.reward_early_finish
 
                 if self.continue_goal:  # right now False
                     # Update the internal layout so we can correctly resample (given objects have moved)
@@ -1626,34 +1622,34 @@ class Engine(gym.Env, gym.utils.EzPickle):
         if self.task in ['goal', 'button']:
             #####################################################################
             # GOAL REWARD
-            #if self.whole_goal_path_passed:
-            dist_goal = self.dist_goal()
-            reward += (self.last_dist_goal - dist_goal) * self.reward_distance
-            self.last_dist_goal = dist_goal
+            if self.whole_goal_path_passed:
+                dist_goal = self.dist_goal()
+                reward += (self.last_dist_goal - dist_goal) * self.reward_distance
+                self.last_dist_goal = dist_goal
 
             #####################################################################
             # GOAL PATH REWARD
             # distance from robot to the next goal path location (idx + 1)
-            #else:
-            dist_to_cur_goal_path = self.dist_goal_cur_goal_path() #self.dist_xy(self.goal_paths_locations[self.agent_idx + 1])
+            else:
+                dist_to_cur_goal_path = self.dist_goal_cur_goal_path() #self.dist_xy(self.goal_paths_locations[self.agent_idx + 1])
 
-            # not on goal path, only in the beginning
-            if self.agent_idx == -1:  #and not self.whole_goal_path_passed:
-                reward += (self.last_dist_to_cur_goal_path - dist_to_cur_goal_path) * self.reward_distance_goal_path
-            # goal path reward gives incremental reward for passing the goal path
-            # on goal path
-            elif self.agent_idx < len(self.goal_paths_locations):
-                reward += (self.last_dist_to_cur_goal_path - dist_to_cur_goal_path) * self.goal_path_reward[
-                    self.agent_idx] * self.reward_distance_goal_path
-            # last element on goal path
-            elif self.agent_idx == len(self.goal_paths_locations) and self.agent_idx != self.prev_agent_idx:
-                print('Reached last goal path!')
-                reward += (self.last_dist_to_cur_goal_path - dist_to_cur_goal_path) * self.goal_path_reward[-1] * self.reward_distance_goal_path
-            # the whole goal path has been passed, no more reward for goal path anymore
-            #else:
-            #    print('No more reward for goal path!')
-            # save the distance as last distance
-            self.last_dist_to_cur_goal_path = dist_to_cur_goal_path
+                # not on goal path, only in the beginning
+                if self.agent_idx == -1:  #and not self.whole_goal_path_passed:
+                    reward += (self.last_dist_to_cur_goal_path - dist_to_cur_goal_path) * self.reward_distance_goal_path
+                # goal path reward gives incremental reward for passing the goal path
+                # on goal path
+                elif self.agent_idx < len(self.goal_paths_locations):
+                    reward += (self.last_dist_to_cur_goal_path - dist_to_cur_goal_path) * self.goal_path_reward[
+                        self.agent_idx] * self.reward_distance_goal_path
+                # last element on goal path
+                elif self.agent_idx == len(self.goal_paths_locations) and self.agent_idx != self.prev_agent_idx:
+                    print('Reached last goal path!')
+                    reward += (self.last_dist_to_cur_goal_path - dist_to_cur_goal_path) * self.goal_path_reward[-1] * self.reward_distance_goal_path
+                # the whole goal path has been passed, no more reward for goal path anymore
+                #else:
+                #    print('No more reward for goal path!')
+                # save the distance as last distance
+                self.last_dist_to_cur_goal_path = dist_to_cur_goal_path
 
         #  Distance from robot to box
         if self.task == 'push':

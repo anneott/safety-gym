@@ -5,6 +5,8 @@ from string import capwords
 from gym.envs.registration import register
 import numpy as np
 
+from gym.envs import mujoco
+mujoco.HumanoidEnv
 
 VERSION = 'v0'
 
@@ -112,7 +114,7 @@ goal_all = {
     'goal_size': 0.25, #0.3,
     'goal_keepout': 0.305,
     'hazards_size': 0.25,  # overrides hazard size in engine class
-    'hazards_keepout': 0.13, #18
+    'hazards_keepout': 0,#0.13, #18
     'pillars_keepout': 0.1,
     'robot_keepout': 0.01, #0.1,
     'goal_paths_keepout': 0.3,
