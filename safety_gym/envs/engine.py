@@ -9,10 +9,11 @@ from copy import deepcopy
 from collections import OrderedDict
 import mujoco_py
 from mujoco_py import MjViewer, MujocoException, const, MjRenderContextOffscreen
-#from envs.world import Roads
 from safety_gym.envs.traffic_world import Visualize, RandomRoads, GoalPath
 
-from safety_gym.envs.world import World, Robot
+from safety_gym.envs.world import World, Robot, Pedestrian
+
+from gym.envs.mujoco import mujoco_env
 
 import sys
 
@@ -31,6 +32,7 @@ COLOR_WALL = np.array([.5, .5, .5, 1])
 COLOR_GREMLIN = np.array([0.5, 0, 1, 1])
 COLOR_CIRCLE = np.array([0, 1, 0, 1])
 COLOR_RED = np.array([1, 0, 0, 1])
+COLOR_PEDESTRIAN = np.array([0.5, 0, 1, 1])
 
 # Groups are a mujoco-specific mechanism for selecting which geom objects to "see"
 # We use these for raycasting lidar, where there are different lidar types.
@@ -46,6 +48,7 @@ GROUP_VASE = 4
 GROUP_GREMLIN = 5
 GROUP_CIRCLE = 6
 GROUP_GOAL_PATH = 2
+GROUP_PEDESTRIAN = 7
 
 # Constant for origin of world
 ORIGIN_COORDINATES = np.zeros(3)
@@ -55,13 +58,13 @@ DEFAULT_WIDTH = 256
 DEFAULT_HEIGHT = 256
 
 # Placement limits (min X, min Y, max X, max Y)
-grid_size_max = 8
+grid_size_max = 15#8
 placement_xmin = 0
 placement_ymin = 0
 placement_xmax = grid_size_max
 placement_ymax = grid_size_max
 
-nr_of_roads = 4
+nr_of_roads = 8#4
 
 class ResamplingError(AssertionError):
     ''' Raised when we fail to sample a valid distribution of objects or goals '''
@@ -145,6 +148,15 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'robot_keepout': 0.1,#,3,  # Needs to be set to match the robot XML used
         'robot_base': 'xmls/cars/base_car/car1.xml',#'xmls/car.xml',# #  # Which robot XML to use as the base
         'robot_rot': None,  # Override robot starting angle
+
+        # Pedestrian
+        'pedestrians_num': 0,
+        'pedestrians_placements': None,  # Robot placements list (defaults to full extents)
+        'pedestrians_locations': [], #[random.choice(pedestrian_road_locations)],  # [start],
+        'pedestrians_size': 0.1,
+        'pedestrians_keepout': 0,  # ,3,  # Needs to be set to match the robot XML used
+        'pedestrians_base': 'xmls/humanoid/humanoid.xml',  # 'xmls/car.xml',# #  # Which robot XML to use as the base
+        'pedestrians_rot': None,  # Override robot starting angle
 
         # Starting position distribution
         'randomize_layout': True,  # If false, set the random seed before layout to constant
@@ -234,7 +246,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'reward_goal': 1.0,  # Sparse reward for being inside the goal area
         'reward_distance_goal_path': 0.8,  # Dense reward multipleid by the distance move to the next goal path circle
         'goal_path_reward': 0, # specified later, reward increases incrementally when getting closer to the end goal in the goal path
-        'reward_early_finish': 0.001, # reward if the agent completes the goal earlier than num_steps (total_steps - steps_made) * reward_early_finish
+        'reward_early_finish': 0.0001, # reward if the agent completes the goal earlier than num_steps (total_steps - steps_made) * reward_early_finish
         'reward_box_dist': 1.0,  # Dense reward for moving the robot towards the box
         'reward_box_goal': 1.0,  # Reward for moving the box towards the goal
         'reward_orientation': False, #True, #False,  # Reward for being upright
@@ -319,9 +331,9 @@ class Engine(gym.Env, gym.utils.EzPickle):
         'pillars_cost': 1.0,  # Cost (per step) for being in contact with a pillar
 
         # Gremlins (moving objects we should avoid)
-        'gremlins_num': 1,  # Number of gremlins in the world
+        'gremlins_num': 0,  # Number of gremlins in the world
         'gremlins_placements': None,  # Gremlins placements list (defaults to full extents)
-        'gremlins_locations': [random.choice(pedestrian_road_locations)],  # Fixed locations to override placements
+        'gremlins_locations':  [],  # Fixed locations to override placements
         'gremlins_keepout': 0, #0.5,  # Radius for keeping out (contains gremlin path)
         'gremlins_travel': 0.3,  # Radius of the circle traveled in
         'gremlins_size': 0.05, #0.1,  # Half-size (radius) of gremlin objects
@@ -356,6 +368,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Load up a simulation of the robot, just to figure out observation space
         self.robot = Robot(self.robot_base)
+        self.pedestrian = Pedestrian(self.pedestrians_base)
 
         self.action_space = gym.spaces.Box(-1, 1, (self.robot.nu,), dtype=np.float32)
         self.build_observation_space()
@@ -548,6 +561,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
             obs_space_dict['goal_dist'] = gym.spaces.Box(0.0, 1.0, (1,), dtype=np.float32)
         if self.observe_goal_comp:
             obs_space_dict['goal_compass'] = gym.spaces.Box(-1.0, 1.0, (self.compass_shape,), dtype=np.float32)
+        print('self.whole_goal_path_passed',self.whole_goal_path_passed)
         if self.observe_goal_lidar:
             obs_space_dict['goal_lidar'] = gym.spaces.Box(0.0, 1.0, (self.lidar_num_bins,), dtype=np.float32)
         if self.task == 'circle' and self.observe_circle:
@@ -647,6 +661,8 @@ class Engine(gym.Env, gym.utils.EzPickle):
             placements.update(self.placements_dict_from_object('gremlin'))
         if self.goal_paths_num:
             placements.update(self.placements_dict_from_object('goal_path'))
+        if self.pedestrians_num:
+            placements.update(self.placements_dict_from_object('pedestrian'))
 
         self.placements = placements
 
@@ -862,6 +878,22 @@ class Engine(gym.Env, gym.utils.EzPickle):
                         'rgba': COLOR_HAZARD} # * [1, 1, 1, 0.25]}  # 0.1]}  # transparent
                 world_config['geoms'][name] = geom
 
+        # TODO NEW PEDESTRIAN
+
+        if self.pedestrians_num:
+            for i in range(self.pedestrians_num):
+                name = f'pedestrian{i}'
+                geom = {'name': name,
+                        'size': [self.pedestrians_size, self.pedestrians_size, 1e-2],  # self.hazards_size / 2],
+                        'pos': np.r_[self.layout[name], 2e-2],  # self.hazards_size / 2 + 1e-2],
+                        'rot': 0, #self.random_rot(),
+                        'type': 'box',#mujoco_env.MujocoEnv.__init__(self, 'humanoid.xml', 5),#self.pedestrian, #self.pedestrians_base,
+                        'contype': 0,
+                        'conaffinity': 0,
+                        'group': GROUP_PEDESTRIAN,  # TODO,
+                        'rgba': COLOR_PEDESTRIAN} # * [1, 1, 1, 0.25]}  # 0.1]}  # transparent
+                world_config['geoms'][name] = geom
+
         if self.pillars_num:
             for i in range(self.pillars_num):
                 name = f'pillar{i}'
@@ -972,7 +1004,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
         for other_name, other_xy in self.layout.items():
             other_keepout = self.placements[other_name][1]
             dist = np.sqrt(np.sum(np.square(goal_xy - other_xy)))
-            #print('Robot locations', self.robot_locations, 'self.layout', self.layout['robot'])
             # or goal and start location are closer than 0.5 to each other => TRUE
             if (dist < other_keepout + self.placements_margin + keepout) or \
                 ((np.around(goal_xy * 2.0) / 2.0 == list(self.layout['robot'])).all()) or \
@@ -1583,9 +1614,10 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 print('\n\n\n\n!!!Reached the goal!!!\n\n\n\n')
                 info['goal_met'] = True
                 reward += self.reward_goal
-                # the earlier goal is reached, the bigger the reward (otherwise agent learns to wait with reaching the end goal)
-                print('Finishing early reward:', (self.num_steps - self.steps) * self.reward_early_finish)
-                reward += (self.num_steps - self.steps) * self.reward_early_finish
+                # the yier goal is reached, the bigger the reward (otherwise agent learns to wait with reaching the end goal)
+                print('Finishing early reward:', (self.num_steps - self.steps) * self.reward_early_finish * len(self.goal_paths_locations))
+                reward += (self.num_steps - self.steps) * self.reward_early_finish * len(self.goal_paths_locations)
+
 
                 if self.continue_goal:  # right now False
                     # Update the internal layout so we can correctly resample (given objects have moved)
@@ -1642,6 +1674,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                     reward += (self.last_dist_to_cur_goal_path - dist_to_cur_goal_path) * self.goal_path_reward[
                         self.agent_idx] * self.reward_distance_goal_path
                 # last element on goal path
+                # TODO BUG NEVER REACHES HERE, because before gets marked as goal path passed
                 elif self.agent_idx == len(self.goal_paths_locations) and self.agent_idx != self.prev_agent_idx:
                     print('Reached last goal path!')
                     reward += (self.last_dist_to_cur_goal_path - dist_to_cur_goal_path) * self.goal_path_reward[-1] * self.reward_distance_goal_path

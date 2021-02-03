@@ -54,6 +54,8 @@ class World:
         'robot_xy': np.zeros(2),  # Robot XY location
         'robot_rot': 0,  # Robot rotation about Z axis
 
+        'pedestrian_base':'xmls/humanoid/walker2d.xml',
+
         'floor_size': [3.5, 3.5, .1],  # Used for displaying the floor, overridden somewhere
 
         # Objects -- this is processed and added by the Engine class
@@ -75,6 +77,7 @@ class World:
         self.render_context = render_context
         self.update_viewer_sim = False
         self.robot = Robot(self.robot_base)
+        self.pedestrian = Pedestrian(self.pedestrian_base)
 
     def parse(self, config):
         ''' Parse a config dict - see self.DEFAULT for description '''
@@ -106,6 +109,9 @@ class World:
         with open(self.robot_base_path) as f:
             self.robot_base_xml = f.read()
         self.xml = xmltodict.parse(self.robot_base_xml)  # Nested OrderedDict objects
+        #print('\n\n\nself car xml')
+        #print(xmltodict.unparse(self.xml, pretty=True), '\n\n')
+        #print(self.xml, '\n\n')
 
         # Convenience accessor for xml dictionary
         worldbody = self.xml['mujoco']['worldbody']
@@ -128,7 +134,21 @@ class World:
         if 'weld' not in equality:
             equality['weld'] = []
 
+        #print('\nself xml', self.xml)
+
+
+        # TODO NEW
+        # self.pedestrian_base_path = os.path.join(BASE_DIR, self.pedestrian_base)
+        # with open(self.pedestrian_base_path) as f:
+        #     self.pedestrian_base_xml = f.read()
+        # self.pedestrian_xml = xmltodict.parse(self.pedestrian_base_xml)  # Nested OrderedDict objects
+        # print('\n\n\nself ped xml')
+        # print(self.pedestrian_xml, '\n\n')
+        # #print(xmltodict.unparse(self.pedestrian_xml, pretty=True),'\n\n')
+        # worldbody['body'] = self.pedestrian_xml#xmltodict.unparse(self.pedestrian_xml, pretty=True)
+
         # Add asset section if missing
+        # sky
         if 'asset' not in self.xml['mujoco']:
             # old default rgb1: ".4 .5 .6"
             # old default rgb2: "0 0 0"
@@ -308,7 +328,7 @@ class World:
             worldbody['body'].append(body['body'])
 
         # Instantiate simulator
-        # print(xmltodict.unparse(self.xml, pretty=True))
+        #print(xmltodict.unparse(self.xml, pretty=True))
         self.xml_string = xmltodict.unparse(self.xml)
         self.model = load_model_from_xml(self.xml_string)
         self.sim = MjSim(self.model)
@@ -445,6 +465,60 @@ class Robot:
                     # (That we are invariant to relative whole-world transforms)
                     # If slide joints are added we sould ensure this stays true!
                     raise ValueError('Slide joints in robots not currently supported')
+
+
+class Pedestrian:
+    ''' Simple utility class for getting mujoco-specific info about a robot '''
+    def __init__(self, path):
+        base_path = os.path.join(BASE_DIR, path)
+        self.sim = MjSim(load_model_from_path(base_path))
+        self.sim.forward()
+
+        # Needed to figure out z-height of free joint of offset body
+        self.z_height = self.sim.data.get_body_xpos('torso')[2]
+        # Get a list of geoms in the robot
+        self.geom_names = [n for n in self.sim.model.geom_names if n != 'floor']
+        # Needed to figure out the observation spaces
+        self.nq = self.sim.model.nq
+        self.nv = self.sim.model.nv
+        # Needed to figure out action space
+        self.nu = self.sim.model.nu
+        # Needed to figure out observation space
+        # See engine.py for an explanation for why we treat these separately
+        self.hinge_pos_names = []
+        self.hinge_vel_names = []
+        self.ballquat_names = []
+        self.ballangvel_names = []
+        self.sensor_dim = {}
+        for name in self.sim.model.sensor_names:
+            id = self.sim.model.sensor_name2id(name)
+            self.sensor_dim[name] = self.sim.model.sensor_dim[id]
+            sensor_type = self.sim.model.sensor_type[id]
+            if self.sim.model.sensor_objtype[id] == const.OBJ_JOINT:
+                joint_id = self.sim.model.sensor_objid[id]
+                joint_type = self.sim.model.jnt_type[joint_id]
+                if joint_type == const.JNT_HINGE:
+                    if sensor_type == const.SENS_JOINTPOS:
+                        self.hinge_pos_names.append(name)
+                    elif sensor_type == const.SENS_JOINTVEL:
+                        self.hinge_vel_names.append(name)
+                    else:
+                        t = self.sim.model.sensor_type[i]
+                        raise ValueError('Unrecognized sensor type {} for joint'.format(t))
+                elif joint_type == const.JNT_BALL:
+                    if sensor_type == const.SENS_BALLQUAT:
+                        self.ballquat_names.append(name)
+                    elif sensor_type == const.SENS_BALLANGVEL:
+                        self.ballangvel_names.append(name)
+                elif joint_type == const.JNT_SLIDE:
+                    # Adding slide joints is trivially easy in code,
+                    # but this removes one of the good properties about our observations.
+                    # (That we are invariant to relative whole-world transforms)
+                    # If slide joints are added we sould ensure this stays true!
+                    raise ValueError('Slide joints in robots not currently supported')
+
+
+
 
 # TODO UNUSED
 class Roads:
