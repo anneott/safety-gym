@@ -118,14 +118,13 @@ class Engine(gym.Env, gym.utils.EzPickle):
     #try:
     if roads:
             vis = Visualize(roads, grid_size=grid_size_max)
-            road_locations =  [(7.0, 3.0), (7.5, 3.0), (7.0, 3.5), (7.5, 3.5), (0.0, 7.0), (0.5, 7.0), (0.0, 7.5), (0.5, 7.5), (3.0, 7.0), (3.0, 7.5), (3.5, 7.0), (3.5, 7.5), (2.0, 4.5), (2.5, 4.0), (4.0, 0.0), (4.0, 0.5), (4.5, 0.0), (4.5, 0.5), (2.5, 4.5), (6.0, 7.0), (6.0, 7.5), (6.5, 7.0), (6.5, 7.5), (7.0, 6.0), (7.5, 6.0), (7.0, 6.5), (7.5, 6.5), (0.5, 4.0), (0.0, 4.5), (0.0, 4.0), (0.5, 4.5), (3.0, 2.0), (3.5, 2.0), (3.0, 2.5), (3.5, 2.5), (6.0, 0.0), (6.0, 0.5), (6.5, 0.0), (6.5, 0.5), (7.5, 5.5), (7.0, 5.0), (7.5, 5.0), (7.0, 5.5), (0.0, 1.0), (0.5, 1.0), (0.0, 1.5), (0.5, 1.5), (3.0, 1.0), (3.5, 1.0), (3.0, 1.5), (3.5, 1.5), (7.0, 2.0), (7.5, 2.0), (7.0, 2.5), (7.5, 2.5), (3.0, 6.0), (3.5, 6.0), (3.0, 6.5), (3.5, 6.5), (6.0, 4.0), (5.0, 4.0), (5.0, 4.5), (5.5, 4.0), (5.5, 4.5), (6.0, 4.5), (7.0, 1.0), (7.5, 1.0), (7.0, 1.5), (7.5, 1.5), (0.0, 5.0), (0.5, 5.0), (0.0, 5.5), (0.5, 5.5), (1.0, 0.0), (1.0, 0.5), (1.5, 0.0), (1.5, 0.5), (3.0, 5.0), (2.0, 7.0), (2.0, 7.5), (2.5, 7.0), (2.5, 7.5), (3.5, 5.0), (3.0, 5.5), (3.5, 5.5), (5.0, 7.0), (5.0, 7.5), (5.5, 7.0), (5.5, 7.5), (7.0, 4.5), (7.5, 4.5), (7.0, 4.0), (7.5, 4.0), (0.0, 2.5), (0.5, 2.5), (0.0, 2.0), (0.5, 2.0), (3.0, 0.0), (3.0, 0.5), (3.5, 0.0), (3.5, 0.5), (5.0, 0.0), (5.0, 0.5), (5.5, 0.0), (5.5, 0.5), (1.0, 4.0), (1.0, 4.5), (1.5, 4.0), (1.5, 4.5), (7.0, 0.0), (7.0, 0.5), (7.5, 0.0), (7.5, 0.5), (0.0, 6.0), (0.5, 6.0), (0.0, 6.5), (0.5, 6.5), (1.0, 7.0), (1.0, 7.5), (1.5, 7.0), (1.5, 7.5), (3.0, 4.0), (3.5, 4.0), (3.0, 4.5), (3.5, 4.5), (6.5, 4.0), (6.5, 4.5), (4.0, 7.0), (4.0, 7.5), (4.5, 7.0), (4.5, 7.5), (2.0, 4.0), (7.0, 7.0), (7.5, 7.0), (7.0, 7.5), (7.5, 7.5), (0.0, 3.5), (0.5, 3.5), (0.0, 3.0), (0.5, 3.0), (3.0, 3.0), (3.5, 3.0), (3.0, 3.5), (3.5, 3.5), (4.0, 4.0), (4.0, 4.5), (4.5, 4.0), (4.5, 4.5), (0.5, 0.5), (0.0, 0.5), (0.0, 0.0), (0.5, 0.0), (2.0, 0.0), (2.0, 0.5), (2.5, 0.0), (2.5, 0.5)]
-                #vis.calculate_road_locations()
+            road_locations = vis.calculate_road_locations()
             pedestrian_road_locations = vis.calculate_pedestrian_road_locations()
             pillar_locations = vis.calculate_house_locations()
 
             print('\nroad locations\n', road_locations)
-            start = np.array([6.5, 4.5])
-            goal = np.array([5.5, 7])
+            #start = np.array([6.5, 4.5])
+            #goal = np.array([5.5, 7])
 
             #start = random.choice(road_locations)
         #goal_path_locations = GoalPath(np.array(start), np.array(goal), road_locations).find_path_to_goal()
@@ -145,7 +144,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Robot
         'robot_placements': None,  # Robot placements list (defaults to full extents)
-        'robot_locations': [start], #[start],
+        'robot_locations': [], #[start],
         'robot_keepout': 0.1,#,3,  # Needs to be set to match the robot XML used
         'robot_base': 'xmls/cars/base_car/car1.xml',#'xmls/car.xml',# #  # Which robot XML to use as the base
         'robot_rot': None,  # Override robot starting angle
@@ -220,7 +219,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Goal parameters
         'goal_placements': None,  # Placements where goal may appear (defaults to full extents)
-        'goal_locations': [goal],#[random.choice(goal_locations)],#[],#[np.array(random.choice(road_locations))], #[goal_loc],  # Fixed locations to override placements, pick randomly a road location to place a goal
+        'goal_locations': [],#[random.choice(goal_locations)],#[],#[np.array(random.choice(road_locations))], #[goal_loc],  # Fixed locations to override placements, pick randomly a road location to place a goal
         'goal_keepout': 0.1,#3, # Keepout radius when placing goals
         'goal_size': 0.3,  #0.3,  # Radius of the goal area (if using task 'goal')
 
