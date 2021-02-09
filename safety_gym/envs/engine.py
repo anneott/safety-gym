@@ -58,13 +58,13 @@ DEFAULT_WIDTH = 256
 DEFAULT_HEIGHT = 256
 
 # Placement limits (min X, min Y, max X, max Y)
-grid_size_max = 15#8
+grid_size_max = 8
 placement_xmin = 0
 placement_ymin = 0
 placement_xmax = grid_size_max
 placement_ymax = grid_size_max
 
-nr_of_roads = 8#4
+nr_of_roads = 4
 
 class ResamplingError(AssertionError):
     ''' Raised when we fail to sample a valid distribution of objects or goals '''
@@ -118,13 +118,14 @@ class Engine(gym.Env, gym.utils.EzPickle):
     #try:
     if roads:
             vis = Visualize(roads, grid_size=grid_size_max)
-            road_locations = vis.calculate_road_locations()
+            road_locations =  [(7.0, 3.0), (7.5, 3.0), (7.0, 3.5), (7.5, 3.5), (0.0, 7.0), (0.5, 7.0), (0.0, 7.5), (0.5, 7.5), (3.0, 7.0), (3.0, 7.5), (3.5, 7.0), (3.5, 7.5), (2.0, 4.5), (2.5, 4.0), (4.0, 0.0), (4.0, 0.5), (4.5, 0.0), (4.5, 0.5), (2.5, 4.5), (6.0, 7.0), (6.0, 7.5), (6.5, 7.0), (6.5, 7.5), (7.0, 6.0), (7.5, 6.0), (7.0, 6.5), (7.5, 6.5), (0.5, 4.0), (0.0, 4.5), (0.0, 4.0), (0.5, 4.5), (3.0, 2.0), (3.5, 2.0), (3.0, 2.5), (3.5, 2.5), (6.0, 0.0), (6.0, 0.5), (6.5, 0.0), (6.5, 0.5), (7.5, 5.5), (7.0, 5.0), (7.5, 5.0), (7.0, 5.5), (0.0, 1.0), (0.5, 1.0), (0.0, 1.5), (0.5, 1.5), (3.0, 1.0), (3.5, 1.0), (3.0, 1.5), (3.5, 1.5), (7.0, 2.0), (7.5, 2.0), (7.0, 2.5), (7.5, 2.5), (3.0, 6.0), (3.5, 6.0), (3.0, 6.5), (3.5, 6.5), (6.0, 4.0), (5.0, 4.0), (5.0, 4.5), (5.5, 4.0), (5.5, 4.5), (6.0, 4.5), (7.0, 1.0), (7.5, 1.0), (7.0, 1.5), (7.5, 1.5), (0.0, 5.0), (0.5, 5.0), (0.0, 5.5), (0.5, 5.5), (1.0, 0.0), (1.0, 0.5), (1.5, 0.0), (1.5, 0.5), (3.0, 5.0), (2.0, 7.0), (2.0, 7.5), (2.5, 7.0), (2.5, 7.5), (3.5, 5.0), (3.0, 5.5), (3.5, 5.5), (5.0, 7.0), (5.0, 7.5), (5.5, 7.0), (5.5, 7.5), (7.0, 4.5), (7.5, 4.5), (7.0, 4.0), (7.5, 4.0), (0.0, 2.5), (0.5, 2.5), (0.0, 2.0), (0.5, 2.0), (3.0, 0.0), (3.0, 0.5), (3.5, 0.0), (3.5, 0.5), (5.0, 0.0), (5.0, 0.5), (5.5, 0.0), (5.5, 0.5), (1.0, 4.0), (1.0, 4.5), (1.5, 4.0), (1.5, 4.5), (7.0, 0.0), (7.0, 0.5), (7.5, 0.0), (7.5, 0.5), (0.0, 6.0), (0.5, 6.0), (0.0, 6.5), (0.5, 6.5), (1.0, 7.0), (1.0, 7.5), (1.5, 7.0), (1.5, 7.5), (3.0, 4.0), (3.5, 4.0), (3.0, 4.5), (3.5, 4.5), (6.5, 4.0), (6.5, 4.5), (4.0, 7.0), (4.0, 7.5), (4.5, 7.0), (4.5, 7.5), (2.0, 4.0), (7.0, 7.0), (7.5, 7.0), (7.0, 7.5), (7.5, 7.5), (0.0, 3.5), (0.5, 3.5), (0.0, 3.0), (0.5, 3.0), (3.0, 3.0), (3.5, 3.0), (3.0, 3.5), (3.5, 3.5), (4.0, 4.0), (4.0, 4.5), (4.5, 4.0), (4.5, 4.5), (0.5, 0.5), (0.0, 0.5), (0.0, 0.0), (0.5, 0.0), (2.0, 0.0), (2.0, 0.5), (2.5, 0.0), (2.5, 0.5)]
+                #vis.calculate_road_locations()
             pedestrian_road_locations = vis.calculate_pedestrian_road_locations()
             pillar_locations = vis.calculate_house_locations()
 
             print('\nroad locations\n', road_locations)
-            start = np.array([7, 1.5])
-            goal = np.array([7, 3])
+            start = np.array([6.5, 4.5])
+            goal = np.array([5.5, 7])
 
             #start = random.choice(road_locations)
         #goal_path_locations = GoalPath(np.array(start), np.array(goal), road_locations).find_path_to_goal()
@@ -144,7 +145,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Robot
         'robot_placements': None,  # Robot placements list (defaults to full extents)
-        'robot_locations': [], #[start],
+        'robot_locations': [start], #[start],
         'robot_keepout': 0.1,#,3,  # Needs to be set to match the robot XML used
         'robot_base': 'xmls/cars/base_car/car1.xml',#'xmls/car.xml',# #  # Which robot XML to use as the base
         'robot_rot': None,  # Override robot starting angle
@@ -152,16 +153,16 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # Pedestrian
         'pedestrians_num': 0,
         'pedestrians_placements': None,  # Robot placements list (defaults to full extents)
-        'pedestrians_locations': [], #[random.choice(pedestrian_road_locations)],  # [start],
+        'pedestrians_locations': [],# [random.choice(pedestrian_road_locations)],  # [start],
         'pedestrians_size': 0.1,
         'pedestrians_keepout': 0,  # ,3,  # Needs to be set to match the robot XML used
-        'pedestrians_base': 'xmls/humanoid/humanoid.xml',  # 'xmls/car.xml',# #  # Which robot XML to use as the base
+        'pedestrians_base': 'xmls/humanoid/walker2d.xml',  # 'xmls/car.xml',# #  # Which robot XML to use as the base
         'pedestrians_rot': None,  # Override robot starting angle
 
         # Starting position distribution
         'randomize_layout': True,  # If false, set the random seed before layout to constant
         'build_resample': True,  # If true, rejection sample from valid environments
-        'continue_goal': False, #False, #True <- does not work at the moment!!,  # If true, draw a new goal after achievement
+        'continue_goal': False, #True <- does not work at the moment!!,  # If true, draw a new goal after achievement
         'terminate_resample_failure': True,  # If true, end episode when resampling fails,
                                              # otherwise, raise a python exception.
 
@@ -219,14 +220,14 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Goal parameters
         'goal_placements': None,  # Placements where goal may appear (defaults to full extents)
-        'goal_locations': [],#[random.choice(goal_locations)],#[],#[np.array(random.choice(road_locations))], #[goal_loc],  # Fixed locations to override placements, pick randomly a road location to place a goal
+        'goal_locations': [goal],#[random.choice(goal_locations)],#[],#[np.array(random.choice(road_locations))], #[goal_loc],  # Fixed locations to override placements, pick randomly a road location to place a goal
         'goal_keepout': 0.1,#3, # Keepout radius when placing goals
         'goal_size': 0.3,  #0.3,  # Radius of the goal area (if using task 'goal')
 
         # Path to goal parameters
-        'goal_paths_num': 0,#len(GoalPath(np.array(random.choice(sl)), np.array(random.choice(gl)), road_locations).find_path_to_goal()), #len(GoalPath(start_loc, goal_loc, road_locations).find_path_to_goal()),
+        'goal_paths_num': 0,
         'goal_paths_placements': None,  # Placements where goal may appear (defaults to full extents)
-        'goal_paths_locations': [], #GoalPath(np.array(random.choice(sl)), np.array(random.choice(gl)), road_locations).find_path_to_goal(), # GoalPath(start_loc, goal_loc, road_locations).find_path_to_goal(), #goal_path_locations,
+        'goal_paths_locations': [],
         # Fixed locations to override placements, pick randomly a road location to place a goal
         'goal_paths_keepout': 0,  #0.4  # Keepout radius when placing goals
         'goal_paths_size': 0.25,  #0.3 # Radius of the goal area (if using task 'goal')
@@ -333,7 +334,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
         # Gremlins (moving objects we should avoid)
         'gremlins_num': 0,  # Number of gremlins in the world
         'gremlins_placements': None,  # Gremlins placements list (defaults to full extents)
-        'gremlins_locations':  [],  # Fixed locations to override placements
+        'gremlins_locations':  [], #[random.choice(road_locations)],  # Fixed locations to override placements
         'gremlins_keepout': 0, #0.5,  # Radius for keeping out (contains gremlin path)
         'gremlins_travel': 0.3,  # Radius of the circle traveled in
         'gremlins_size': 0.05, #0.1,  # Half-size (radius) of gremlin objects
@@ -368,7 +369,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # Load up a simulation of the robot, just to figure out observation space
         self.robot = Robot(self.robot_base)
-        self.pedestrian = Pedestrian(self.pedestrians_base)
+        #self.pedestrian = Pedestrian(self.pedestrians_base)
 
         self.action_space = gym.spaces.Box(-1, 1, (self.robot.nu,), dtype=np.float32)
         self.build_observation_space()
@@ -561,7 +562,6 @@ class Engine(gym.Env, gym.utils.EzPickle):
             obs_space_dict['goal_dist'] = gym.spaces.Box(0.0, 1.0, (1,), dtype=np.float32)
         if self.observe_goal_comp:
             obs_space_dict['goal_compass'] = gym.spaces.Box(-1.0, 1.0, (self.compass_shape,), dtype=np.float32)
-        print('self.whole_goal_path_passed',self.whole_goal_path_passed)
         if self.observe_goal_lidar:
             obs_space_dict['goal_lidar'] = gym.spaces.Box(0.0, 1.0, (self.lidar_num_bins,), dtype=np.float32)
         if self.task == 'circle' and self.observe_circle:
@@ -815,7 +815,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 self._gremlins_rots[i] = self.random_rot()
                 object = {'name': name,
                           'size': np.ones(3) * self.gremlins_size,
-                          'type': 'box',
+                          'type': 'sphere',
                           'density': self.gremlins_density,
                           'pos': np.r_[self.layout[name.replace('obj', '')], self.gremlins_size],
                           'rot': self._gremlins_rots[i],
@@ -880,19 +880,19 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
         # TODO NEW PEDESTRIAN
 
-        if self.pedestrians_num:
-            for i in range(self.pedestrians_num):
-                name = f'pedestrian{i}'
-                geom = {'name': name,
-                        'size': [self.pedestrians_size, self.pedestrians_size, 1e-2],  # self.hazards_size / 2],
-                        'pos': np.r_[self.layout[name], 2e-2],  # self.hazards_size / 2 + 1e-2],
-                        'rot': 0, #self.random_rot(),
-                        'type': 'box',#mujoco_env.MujocoEnv.__init__(self, 'humanoid.xml', 5),#self.pedestrian, #self.pedestrians_base,
-                        'contype': 0,
-                        'conaffinity': 0,
-                        'group': GROUP_PEDESTRIAN,  # TODO,
-                        'rgba': COLOR_PEDESTRIAN} # * [1, 1, 1, 0.25]}  # 0.1]}  # transparent
-                world_config['geoms'][name] = geom
+        # if self.pedestrians_num:
+        #     for i in range(self.pedestrians_num):
+        #         name = f'pedestrian{i}'
+        #         geom = {'name': name,
+        #                 'size': [self.pedestrians_size, self.pedestrians_size, 1e-2],  # self.hazards_size / 2],
+        #                 'pos': np.r_[self.layout[name], 2e-2],  # self.hazards_size / 2 + 1e-2],
+        #                 'rot': 0, #self.random_rot(),
+        #                 'type': 'box',#mujoco_env.MujocoEnv.__init__(self, 'humanoid.xml', 5),#self.pedestrian, #self.pedestrians_base,
+        #                 'contype': 0,
+        #                 'conaffinity': 0,
+        #                 'group': GROUP_PEDESTRIAN,  # TODO,
+        #                 'rgba': COLOR_PEDESTRIAN} # * [1, 1, 1, 0.25]}  # 0.1]}  # transparent
+        #         world_config['geoms'][name] = geom
 
         if self.pillars_num:
             for i in range(self.pillars_num):
@@ -949,7 +949,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
                 name = f'gremlin{i}mocap'
                 mocap = {'name': name,
                          'size': np.ones(3) * self.gremlins_size,
-                         'type': 'box',
+                         'type': 'sphere', #'box',
                          'pos': np.r_[self.layout[name.replace('mocap', '')], self.gremlins_size],
                          'rot': self._gremlins_rots[i],
                          'group': GROUP_GREMLIN,
@@ -1067,15 +1067,18 @@ class Engine(gym.Env, gym.utils.EzPickle):
         ''' Build a NEW goal position, maybe with resampling due to hazards
         Once for every goal path. Initiate the first goal path location.
         '''
-        # Resample until goal is compatible with layout
-        # create new goal path
+        # Resample until goal path is compatible with start and goal
         self.agent_idx = -1  # the location agent is in the goal path (goal_paths_locations)
-        new_goal_xy = np.array(self.layout['goal'])
+        goal_xy = np.array(self.layout['goal'])
         start_xy = np.array(self.layout['robot'])
-        new_goal_path = GoalPath(start_xy, new_goal_xy, self.road_locations).find_path_to_goal()
+        new_goal_path = None
+        while new_goal_path is None:
+            new_goal_path = GoalPath(start_xy, goal_xy, self.road_locations).find_path_to_goal()
+
         self.goal_paths_num = 0 #len(new_goal_path)
-        print('\nNew goal path is: ', new_goal_path, 'new start', np.around(start_xy * 2.0) / 2.0, ', new goal', np.around(new_goal_xy * 2.0) / 2.0 )
-        self.goal_path_reward = np.linspace(1, 2, len(new_goal_path))  # reward increases incrementally when getting closer to the end goal in the goal path
+        print('\nNew goal path is: ', new_goal_path, 'new start', np.around(start_xy * 2.0) / 2.0, ', new goal', np.around(goal_xy * 2.0) / 2.0 )
+        # reward increases incrementally when getting closer to the end goal in the goal path
+        self.goal_path_reward = np.linspace(1, 2, len(new_goal_path))
 
         # make the FIRST circle appear on the path to goal
         first_path_loc = new_goal_path[0]
