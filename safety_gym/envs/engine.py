@@ -124,7 +124,7 @@ class Engine(gym.Env, gym.utils.EzPickle):
 
             print('\nroad locations\n', road_locations)
             #start = np.array([6.5, 4.5])
-            #goal = np.array([5.5, 7])
+            #goal = np.array
 
             #start = random.choice(road_locations)
         #goal_path_locations = GoalPath(np.array(start), np.array(goal), road_locations).find_path_to_goal()

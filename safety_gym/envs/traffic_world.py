@@ -372,6 +372,7 @@ class GoalPath:
         self.start_loc = np.around(start_loc * 2.0) / 2.0  # round to closest .5
         self.goal_loc = np.around(goal_loc * 2.0) / 2.0
         self.road_locations = road_locations
+        self.path = []
 
     def get_neighbours(self, l):
         '''
@@ -397,7 +398,7 @@ class GoalPath:
         for i in range(1, 5):
             min_idx = np.where(dists == heapq.nsmallest(i, dists)[-1])  # get the  idx of closest location to goal
             closest_point = tuple(neighbours[min_idx][0])  # get the cooridnates of the closest point to goal
-            if closest_point in self.road_locations:  # check if the closest point exist on road
+            if closest_point in self.road_locations and closest_point not in self.path:  # check if the closest point exist on road and we are not repeating any location
                 return closest_point
 
         print('\nWARNING: None of the neighbours\n', neighbours, 'are on the road\n, (goal loc:', self.goal_loc, 'start_loc', self.start_loc, ')')
@@ -415,7 +416,6 @@ class GoalPath:
         4) set current location to be our x
         5) repeat steps 1)-4) until we reach the goal
         '''
-        path = []
         current_loc = self.start_loc
         it = 0
         # can finish when we have reached the goal location
@@ -425,8 +425,12 @@ class GoalPath:
 
         while not all(current_loc == self.goal_loc):
             neigh = self.get_neighbours(current_loc)  # get neighbours of the current location
-            loc_in_goal_path = self.closest_point_to_goal(neigh)  # get the closest suitable neighbour of our current location to end
-            path.append(loc_in_goal_path)
+            next_loc = self.closest_point_to_goal(neigh) # get the closest suitable neighbour of our current location to end
+            if next_loc:
+                loc_in_goal_path = next_loc
+            else:
+                return None  # no neighbours to go to 
+            self.path.append(loc_in_goal_path)
             current_loc = loc_in_goal_path  # set the new location to current location
 
             it += 1
@@ -434,4 +438,4 @@ class GoalPath:
                 print('Warning: could not find path to goal, resampling')
                 return None
         # the goal location should not be in the path, preserve all unique locations and their order
-        return list(unique_everseen(path[:-1]))
+        return list(unique_everseen(self.path[:-1]))
